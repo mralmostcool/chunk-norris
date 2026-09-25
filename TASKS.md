@@ -69,9 +69,9 @@ Spring AI moves fast and you are on Boot 4. Where a task names a Spring AI class
 
 **Goal:** uploaded originals are saved safely under `data/uploads`.
 
-- [ ] 3.1 `{pkg}/ingestion/FileStorageService.java` *(new)*: constructor takes `RagProperties` and creates the upload directory if missing
+- [x] 3.1 `{pkg}/ingestion/FileStorageService.java` *(new)*: constructor takes `RagProperties` and creates the upload directory if missing
   ↳ Done when: app boots and `data/uploads/` appears
-- [ ] 3.2 `{pkg}/ingestion/FileStorageService.java`: add `Path save(UUID documentId, MultipartFile file)`; clean the filename (`StringUtils.cleanPath`) and reject anything containing `..`
+- [x] 3.2 `{pkg}/ingestion/FileStorageService.java`: add `Path save(UUID documentId, MultipartFile file)`; clean the filename (`StringUtils.cleanPath`) and reject anything containing `..`
   ↳ Done when: compiles
 
 **Checkpoint:** commit `feat: file storage service`
@@ -82,15 +82,15 @@ Spring AI moves fast and you are on Boot 4. Where a task names a Spring AI class
 
 **Goal:** turn a file into text `Document`s.
 
-- [ ] 4.1 `pom.xml`: add the Spring AI Tika document reader (version managed by the Spring AI BOM; do not pin manually)
+- [x] 4.1 `pom.xml`: add the Spring AI Tika document reader (version managed by the Spring AI BOM; do not pin manually)
   ↳ Done when: Maven reload succeeds and the app still boots
-- [ ] 4.2 `{pkg}/ingestion/DocumentReaderFactory.java` *(new)*: `List<Document> read(Resource resource)` using `TikaDocumentReader`
+- [x] 4.2 `{pkg}/ingestion/DocumentReaderFactory.java` *(new)*: `List<Document> read(Resource resource)` using `TikaDocumentReader`
   ↳ Done when: compiles
-- [ ] 4.3 `src/test/resources/sample-docs/sample.md` *(new)*: about a page of text on a topic you know well
+- [x] 4.3 `src/test/resources/sample-docs/sample.md` *(new)*: about a page of text on a topic you know well
   ↳ Done when: file exists
-- [ ] 4.4 `{test}/ingestion/DocumentReaderFactoryTest.java` *(new)*: reads `sample.md`, asserts the text is non-empty
+- [x] 4.4 `{test}/ingestion/DocumentReaderFactoryTest.java` *(new)*: reads `sample.md`, asserts the text is non-empty
   ↳ Done when: test passes
-- [ ] 4.5 ▶ Verify: `./mvnw.cmd test` is green
+- [x] 4.5 ▶ Verify: `./mvnw.cmd test` is green
 
 **Checkpoint:** commit `feat: document reader`
 
@@ -100,13 +100,13 @@ Spring AI moves fast and you are on Boot 4. Where a task names a Spring AI class
 
 **Goal:** split text into pieces small enough for the embedding model.
 
-- [ ] 5.1 `{pkg}/ingestion/ChunkingService.java` *(new)*: wraps `TokenTextSplitter` configured from `RagProperties.chunkSize`; method `List<Document> chunk(List<Document>)`
+- [x] 5.1 `{pkg}/ingestion/ChunkingService.java` *(new)*: wraps `TokenTextSplitter` configured from `RagProperties.chunkSize`; method `List<Document> chunk(List<Document>)`
   ↳ Done when: compiles (check the splitter's constructor or builder in your version)
-- [ ] 5.2 `{test}/ingestion/ChunkingServiceTest.java` *(new)*: long input produces more than one chunk
+- [x] 5.2 `{test}/ingestion/ChunkingServiceTest.java` *(new)*: long input produces more than one chunk
   ↳ Done when: test passes
-- [ ] 5.3 `{test}/ingestion/ChunkingServiceTest.java`: add an assertion that no chunk exceeds a character ceiling (roughly `chunkSize * 6`)
+- [x] 5.3 `{test}/ingestion/ChunkingServiceTest.java`: add an assertion that no chunk exceeds a character ceiling (roughly `chunkSize * 6`)
   ↳ Done when: test passes
-- [ ] 5.4 ▶ Verify: print the chunks once and read them; do the boundaries make sense?
+- [x] 5.4 ▶ Verify: print the chunks once and read them; do the boundaries make sense?
 
 **Checkpoint:** commit `feat: chunking service`
 
