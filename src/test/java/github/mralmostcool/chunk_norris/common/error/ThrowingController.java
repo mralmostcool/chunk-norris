@@ -10,7 +10,7 @@ import github.mralmostcool.chunk_norris.common.exceptions.SessionNotFoundExcepti
 import github.mralmostcool.chunk_norris.common.exceptions.UnsupportedFileTypeException;
 
 @RestController
-class ThrowingController {
+public class ThrowingController {
 
     @GetMapping("/test/doc-not-found")
     void docNotFound() { throw new DocumentNotFoundException("abc"); }

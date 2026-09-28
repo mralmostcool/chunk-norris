@@ -1,51 +1,50 @@
 server:
-
   shutdown: graceful
 
 
 spring:
-
   lifecycle:
     timeout-per-shutdown-phase: 30s
-
   application:
     name: chunk-norris
-
   datasource:
     url: jdbc:postgresql://localhost:5432/chunknorris
     username: chunknorris
     password: chunknorris
-
   servlet:
     multipart:
       max-file-size: 20MB
       max-request-size: 20MB
-
   docker:
     compose:
       lifecycle-management: none
 
-springdoc:
 
+springdoc:
   api-docs:
     path: /v3/api-docs
-
   swagger-ui:
     path: /swagger-ui.html
     enabled: true
 
+
 scalar:
   enabled: true
   path: /scalar
+
 
 management:
   endpoints:
     web:
       exposure:
         include: health, info, shutdown
-
   endpoint:
     health:
       show-details: always
     shutdown:
       enabled: true
+
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-no-corr-id}] %logger{36} - %msg%n"
