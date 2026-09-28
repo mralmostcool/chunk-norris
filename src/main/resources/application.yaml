@@ -1,4 +1,12 @@
+server:
+
+  shutdown: graceful
+
+
 spring:
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 
   application:
     name: chunk-norris
@@ -58,7 +66,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health, info, shutdown
+
   endpoint:
     health:
       show-details: always
+    shutdown:
+      enabled: true
