@@ -1,10 +1,9 @@
 package github.mralmostcool.chunk_norris.common.error;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -12,12 +11,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = ThrowingController.class)
-@Import(GlobalExceptionHandler.class)
 class GlobalExceptionHandlerTest {
 
-    @Autowired
     private MockMvc mvc;
+
+    @BeforeEach
+    void setUp() {
+        mvc = MockMvcBuilders.standaloneSetup(new ThrowingController())
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+    }
 
     @Test
     void documentNotFound_returns404() throws Exception {
