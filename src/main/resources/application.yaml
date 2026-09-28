@@ -53,3 +53,12 @@ rag:
   top-k: 4
   similarity-threshold: 0.5
   upload-dir: data/uploads
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

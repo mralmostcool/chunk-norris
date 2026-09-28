@@ -1,398 +1,430 @@
-# Chunk Norris Architecture & Workflow Specification
+# Conversational RAG Service: Project Plan
 
-## Overview
+Stack: Spring Boot, Spring AI, PostgreSQL 16 + pgvector, Ollama (`qwen2.5:7b`, `nomic-embed-text-v2-moe`), Apache Tika, JdbcTemplate.
 
-Chunk Norris is a zero-cost local Retrieval-Augmented Generation (RAG) system built with **Spring Boot 4.1.1 (Java 21)**, **Spring AI**, **Ollama** (`qwen2.5:7b` chat model + `nomic-embed-text-v2-moe` embedding model), and **pgvector** (`pgvector/pgvector:pg16` in Docker).
+---
 
-## 1. System Architecture Overview
+## Part 1: Objectives
 
-### 1.1 Generalized Tiered Architecture (All Key Modules)
+### Primary objectives
+1. **Vector DB connectivity and maintenance**: connect to the existing pgvector instance, and keep vectors in sync with document lifecycle (add, update, delete).
+2. **RAG pipeline**: embed a question, retrieve relevant chunks, and generate an answer grounded only in those chunks, with citations.
+3. **Document ingestion**: accept uploads (PDF, DOCX, TXT, HTML), parse, chunk, embed, store; detect duplicates; delete cleanly.
+4. **Conversational layer**: multi-turn chat with a sliding-window memory, plus query rewriting so follow-ups like "what about its cost?" become standalone searches.
 
-```mermaid
-graph TB
-    subgraph Tier1 ["Tier 1: Client & REST API Gateway"]
-        direction LR
-        EP_DOC["/api/documents<br/>(Upload, List, Delete)"]
-        EP_SRCH["/api/search<br/>(Debug Retrieval)"]
-        EP_ASK["/api/ask<br/>(RAG Chat)"]
-        EP_EVAL["/api/eval/run<br/>(Quality Harness)"]
-        EP_ACT["/actuator/health<br/>(Ollama & DB Health)"]
-    end
+### Secondary objectives
+5. **Evaluation harness**: measure retrieval and answer quality against a golden Q&A set so you can tune chunk size, topK and threshold with evidence rather than guesswork.
+6. **Operability**: health checks, structured errors, logging with correlation IDs.
 
-    subgraph Tier2 ["Tier 2: Core Domain & Orchestration Services"]
-        INGEST_SRV["Ingestion Service<br/>(Duplicate Guard, Async Workflow, Registry Updates)"]
-        RETR_SRV["Retrieval Service<br/>(Score Thresholding, Metadata Filter Assembly)"]
-        RAG_SRV["Rag Service<br/>(Context Injection, Refusal Guard, Source Citing)"]
-        EVAL_SRV["Evaluation Runner<br/>(Hit Rate, Refusal Rate & Latency Stats)"]
-    end
+### Non-goals (for v1)
+Authentication, multi-tenancy, streaming responses, re-ranking models, UI. These are easy to add later if the layering is kept clean.
 
-    subgraph Tier3 ["Tier 3: Processing, Parsing & Template Engines"]
-        PARSER["Tika Document Reader<br/>(PDF, TXT, Markdown Parser)"]
-        SPLITTER["Token Text Splitter<br/>(300-Token Headroom Window)"]
-        HASHER["Content Hasher & UUID Gen<br/>(SHA-256 Checksum, UUIDv3 Chunk IDs)"]
-        ENRICHER["Metadata Enricher<br/>(Doc ID, Chunk Index, Hash, Timestamp)"]
-        PROMPTS["Prompt Template Engine<br/>(rag-system.st & rag-user.st Rendering)"]
-    end
+### Definition of done for the whole project
+- Upload a document, ask a question about it, get a cited answer.
+- Ask a follow-up using a pronoun and get a correct answer.
+- Ask an out-of-scope question and get a refusal, not a hallucination.
+- Delete the document and confirm its vectors, file and metadata are all gone.
+- `/api/eval/run` returns a report with hit-rate, groundedness and refusal accuracy.
 
-    subgraph Tier4 ["Tier 4: Spring AI & Spring Data Framework Abstractions"]
-        VS_ABS["Spring AI VectorStore Interface"]
-        CC_ABS["Spring AI ChatClient Interface"]
-        EM_ABS["Spring AI EmbeddingModel Interface"]
-        JDBC_ABS["Spring JdbcTemplate"]
-    end
+---
 
-    subgraph Tier5 ["Tier 5: Infrastructure, Models & Physical Storage"]
-        direction LR
-        PG_DB[("PostgreSQL 16 + pgvector<br/>• DB: chunknorris<br/>• Tables: documents, vector_store")]
-        OLLAMA_CHAT["Ollama Chat Runtime<br/>• qwen2.5:7b (GPU)"]
-        OLLAMA_EMBED["Ollama Embed Runtime<br/>• nomic-embed-text-v2-moe"]
-        DISK_STORAGE[("Local Disk Storage<br/>• ./data/uploads/<br/>• ./data/postgres/")]
-    end
+## Part 2: Modules
 
-    %% API to Service Connections
-    EP_DOC --> INGEST_SRV
-    EP_SRCH --> RETR_SRV
-    EP_ASK --> RAG_SRV
-    EP_EVAL --> EVAL_SRV
+| # | Module | Responsibility | Depends on |
+|---|--------|----------------|-----------|
+| 1 | Document Ingestion | Upload, parse, chunk, embed, store, delete documents | Framework (VectorStore), DB, Disk |
+| 2 | Conversation & Session | Sessions, message history, sliding-window memory, orchestrates the RAG flow | Modules 3, 4, 5 |
+| 3 | Query Rewriting | Turn a follow-up into a standalone query | ChatClient |
+| 4 | Retrieval | Similarity search with threshold, filters, dedup, citation indexing | VectorStore |
+| 5 | Prompt Engine & Generation | Build grounded prompt, call LLM, extract citations | ChatClient |
+| 6 | Evaluation | Golden-set runner and metrics | Module 2 |
+| 7 | Health & Ops | Ollama and DB health indicators | Actuator |
+| X | Config & Common | Properties, exception handling, logging | All |
 
-    %% Ingestion Pipeline Connections
-    INGEST_SRV --> HASHER
-    INGEST_SRV --> DISK_STORAGE
-    INGEST_SRV --> PARSER
-    PARSER --> SPLITTER
-    SPLITTER --> ENRICHER
-    ENRICHER --> VS_ABS
-    INGEST_SRV --> JDBC_ABS
+Layering inside each module (from your diagram): **Controller → Service → Logic → Repository → Model**. Keep controllers thin, put business rules in services, put pure functions (splitters, prompt builders, trimmers, filter builders) in the logic layer so they are unit-testable without Spring.
 
-    %% Retrieval & RAG Connections
-    RAG_SRV --> RETR_SRV
-    RETR_SRV --> VS_ABS
-    RAG_SRV --> PROMPTS
-    PROMPTS --> CC_ABS
+Suggested package layout:
 
-    %% Framework to Infrastructure Connections
-    VS_ABS --> EM_ABS
-    EM_ABS --> OLLAMA_EMBED
-    VS_ABS --> PG_DB
-    CC_ABS --> OLLAMA_CHAT
-    JDBC_ABS --> PG_DB
 ```
-
-### 1.2 End-to-End Sequence Diagram
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant Controller as REST Controllers
-    participant Ingestion as Ingestion Service
-    participant Storage as File Storage & Registry
-    participant Reader as Tika Reader & Splitter
-    participant VectorStore as pgvector Store
-    participant Retrieval as Retrieval Service
-    participant LLM as Ollama ChatClient
-
-    %% Ingestion Flow
-    rect rgb(230, 240, 255)
-    note right of User: Ingestion Phase (POST /api/documents)
-    User->>Controller: Upload File (MultipartFile)
-    Controller->>Ingestion: ingest(file)
-    Ingestion->>Storage: Compute SHA-256 hash & check duplicate
-    alt Duplicate Hash Found
-        Storage-->>Ingestion: Existing Document Record
-        Ingestion-->>Controller: Return UploadResponse (duplicate=true)
-        Controller-->>User: 200 OK (Duplicate skipped)
-    else New File
-        Ingestion->>Storage: Save file to ./data/uploads/ & create registry record (PROCESSING)
-        Ingestion->>Reader: Read Resource via TikaDocumentReader
-        Reader-->>Ingestion: List<Document> raw text
-        Ingestion->>Reader: TokenTextSplitter (chunk-size=300)
-        Reader-->>Ingestion: List<Document> text chunks
-        Ingestion->>Ingestion: Enrich metadata (docId, filename, hash, deterministic chunk UUIDs)
-        Ingestion->>VectorStore: vectorStore.add(chunks) -> Ollama Embeddings -> pgvector
-        Ingestion->>Storage: updateStatus(DONE, chunkCount)
-        Ingestion-->>Controller: UploadResponse (duplicate=false, chunkCount)
-        Controller-->>User: 200 OK / 202 Accepted
-    end
-    end
-
-    %% RAG / Chat Flow
-    rect rgb(240, 255, 230)
-    note right of User: Query & RAG Phase (POST /api/ask)
-    User->>Controller: AskRequest (question, optional documentIds)
-    Controller->>Retrieval: retrieve(question, documentIds)
-    Retrieval->>VectorStore: Similarity Search (topK, similarityThreshold, metadata filter)
-    VectorStore-->>Retrieval: List<RetrievedChunk> with similarity scores
-    alt No chunks pass similarity threshold
-        Retrieval-->>Controller: Empty retrieval list
-        Controller-->>User: AskResponse ("I don't know", empty sources) [LLM NOT CALLED]
-    else Relevant chunks found
-        Retrieval-->>Controller: List<RetrievedChunk>
-        Controller->>LLM: Assemble system prompt + user context template & call ChatClient
-        LLM-->>Controller: Grounded answer string with citations [1], [2]
-        Controller-->>User: AskResponse (answer, List<SourceReference>)
-    end
-    end
-```
-
-### 1.2 Module Responsibilities (Box Component Diagram)
-
-```mermaid
-graph TD
-    subgraph ClientLayer ["Client & Ingestion Trigger Layer"]
-        API["REST Controllers<br/>(Document, Search, Ask, Eval)"]
-    end
-
-    subgraph IngestionModule ["Ingestion Module (Storage, Parsing & Vectorizing)"]
-        FS["FileStorageService<br/>- Save file to ./data/uploads/<br/>- File path cleaning & safety"]
-        REG["DocumentRegistry<br/>- Track doc status (PENDING -> DONE)<br/>- DB table 'documents'"]
-        HASH["ContentHasher<br/>- SHA-256 computation<br/>- Deterministic Chunk UUIDs"]
-        READER["DocumentReaderFactory<br/>- Tika document extraction"]
-        CHUNK["ChunkingService<br/>- TokenTextSplitter (chunkSize)"]
-        ENRICH["MetadataEnricher<br/>- Add metadata (docId, hash, index)"]
-    end
-
-    subgraph RetrievalModule ["Retrieval Module (Search & Filtering)"]
-        RET["RetrievalService<br/>- Apply topK & similarityThreshold<br/>- Filter by documentIds"]
-        FILT["SearchFilterBuilder<br/>- Construct Spring AI filter expressions"]
-    end
-
-    subgraph ChatModule ["Chat & RAG Module (Prompt & Generation)"]
-        PROMPT["PromptTemplates<br/>- Load system/user ST files<br/>- Number context blocks [1], [2]"]
-        RAG["RagService<br/>- Evaluate retrieval results<br/>- Fast-refusal logic<br/>- Model execution"]
-    end
-
-    subgraph PersistenceLayer ["Persistence & External Services"]
-        PGV[("pgvector Store<br/>- Cosine HNSW Index<br/>- 768-dim embeddings")]
-        OLLAMA["Ollama Service<br/>- nomic-embed-text-v2-moe<br/>- qwen2.5:7b"]
-    end
-
-    API --> FS
-    API --> REG
-    FS --> HASH
-    HASH --> READER
-    READER --> CHUNK
-    CHUNK --> ENRICH
-    ENRICH --> PGV
-    ENRICH --> OLLAMA
-
-    API --> RAG
-    RAG --> RET
-    RET --> FILT
-    FILT --> PGV
-    PGV --> OLLAMA
-    RAG --> PROMPT
-    PROMPT --> OLLAMA
-```
-
-### 1.3 System Control Flow & Finite State Machine (FSM)
-
-```mermaid
-stateDiagram-v2
-    [*] --> Idle
-
-    state "Ingestion Pipeline FSM" as Ingestion {
-        [*] --> FileReceived
-        FileReceived --> Hashing: Compute SHA-256
-        Hashing --> DuplicateCheck: Lookup Hash in DocumentRegistry
-        
-        DuplicateCheck --> SkippedDuplicate: Hash exists
-        SkippedDuplicate --> [*]: Return duplicate=true
-
-        DuplicateCheck --> Processing: New Hash
-        Processing --> StoringFile: Save file to ./data/uploads/
-        StoringFile --> Parsing: Tika DocumentReader
-        Parsing --> Chunking: TokenTextSplitter
-        Chunking --> Enriching: Attach metadata & UUIDs
-        Enriching --> Vectorizing: Embed & insert pgvector
-        
-        Vectorizing --> IngestionFailed: Error occurs
-        IngestionFailed --> [*]: Set Status = FAILED
-
-        Vectorizing --> IngestionDone: Success
-        IngestionDone --> [*]: Set Status = DONE, Return metadata
-    }
-
-    state "RAG Query Processing FSM" as RAGFlow {
-        [*] --> QueryReceived
-        QueryReceived --> Filtering: Parse optional documentIds
-        Filtering --> VectorSearch: Execute Similarity Query (pgvector)
-        VectorSearch --> EvaluatingResults: Check similarity threshold
-
-        EvaluatingResults --> RefusalState: Max score < similarityThreshold
-        RefusalState --> [*]: Return "I don't know" (LLM Bypassed)
-
-        EvaluatingResults --> PromptConstruction: Score >= similarityThreshold
-        PromptConstruction --> LLMGeneration: System Prompt + Context [1]..[N] -> qwen2.5
-        LLMGeneration --> CitationMapping: Map output sources
-        CitationMapping --> [*]: Return Grounded Answer + Citations
-    }
-```
-
-### 1.4 Detailed Subsystem Separation Architecture
-
-```mermaid
-graph TD
-    %% Subsystem 1: REST Module
-    subgraph REST_Module ["1. Spring Boot REST Module"]
-        DC["DocumentController<br/>• POST /api/documents<br/>• GET /api/documents<br/>• DELETE /api/documents/{id}"]
-        SC["SearchController<br/>• GET /api/search?q=... (Debug)"]
-        AC["AskController<br/>• POST /api/ask"]
-        EC["EvaluationController<br/>• GET /api/eval/run"]
-    end
-
-    %% Subsystem 2: Ingestion System
-    subgraph Ingestion_System ["2. Spring Boot Ingestion System"]
-        IS["IngestionService<br/>(Pipeline Orchestration)"]
-        FSS["FileStorageService<br/>• Saves to ./data/uploads/<br/>• Path validation"]
-        DR["DocumentRegistry<br/>• JdbcTemplate DB Repository<br/>• Table: 'documents'"]
-        CH["ContentHasher<br/>• SHA-256 Checksum<br/>• UUID Chunk Gen"]
-        DRF["DocumentReaderFactory<br/>• Tika parsing (PDF/TXT/MD)"]
-        CS["ChunkingService<br/>• TokenTextSplitter (size 300)"]
-        ME["MetadataEnricher<br/>• docId, hash, index tags"]
-    end
-
-    %% Subsystem 3: RAG Chat AI Engine
-    subgraph RAG_Chat_AI ["3. RAG Chat AI Engine"]
-        RS["RagService<br/>(RAG Flow Orchestration)"]
-        RETS["RetrievalService<br/>• Queries VectorStore<br/>• Similarity thresholding"]
-        SFB["SearchFilterBuilder<br/>• documentId filter logic"]
-        PT["PromptTemplates<br/>• System & User .st templates<br/>• Context numbering [1]..[N]"]
-        CC["Spring AI ChatClient<br/>(Configured Ollama Bean)"]
-    end
-
-    %% Subsystem 4: Embedding Model Subsystem
-    subgraph Embedding_Model ["4. Embedding Model Subsystem"]
-        OEM["Ollama Embedding Model<br/>• nomic-embed-text-v2-moe<br/>• 768-Float Vector Generator"]
-    end
-
-    %% Subsystem 5: Vector DB Subsystem
-    subgraph Vector_DB ["5. Vector DB Subsystem (pgvector)"]
-        VS["Spring AI VectorStore<br/>(Abstractions & Queries)"]
-        PGV_DB[("PostgreSQL + pgvector<br/>• Table: vector_store<br/>• HNSW Cosine Index")]
-    end
-
-    %% Subsystem 6: External LLM Service
-    subgraph LLM_Service ["6. Ollama Local LLM"]
-        QWEN["qwen2.5:7b Chat Model<br/>(Native Windows / GPU)"]
-    end
-
-    %% --- Connections & Data Flows ---
-
-    %% Ingestion Flow Connections
-    DC -->|1. Multipart File| IS
-    IS -->|2. Raw Bytes| CH
-    CH -->|3. Check SHA-256| DR
-    IS -->|4. Store Original| FSS
-    IS -->|5. Save Meta (PROCESSING)| DR
-    IS -->|6. File Path| DRF
-    DRF -->|7. Raw Text Docs| CS
-    CS -->|8. Token Chunks| ME
-    ME -->|9. Enriched Chunks| VS
-    VS -->|10. Text for Vectorization| OEM
-    OEM -->|11. 768-dim Embeddings| VS
-    VS -->|12. SQL Batch Insert| PGV_DB
-    IS -->|13. Mark Status DONE| DR
-
-    %% Search & Debug Connections
-    SC -->|Direct Vector Query| RETS
-
-    %% RAG / Chat Flow Connections
-    AC -->|1. AskRequest (Question + DocIDs)| RS
-    RS -->|2. Retrieve Chunks| RETS
-    RETS -->|3. Build Filters| SFB
-    SFB -->|4. Filtered Query| VS
-    VS -->|5. Embed Query Text| OEM
-    OEM -->|6. Query Vector| VS
-    VS -->|7. Similarity Search| PGV_DB
-    PGV_DB -->>|8. Top-K Chunks + Scores| VS
-    VS -->>|9. List<Document>| RETS
-    RETS -->>|10. List<RetrievedChunk>| RS
-    
-    RS -->|11. Fast-Refusal Check| RS
-    RS -->|12. Render Prompts & [1] Context| PT
-    PT -->|13. Formatted Prompt| CC
-    CC -->|14. Inference Request| QWEN
-    QWEN -->>|15. Generated Answer String| CC
-    CC -->>|16. Answer Text| RS
-    RS -->|17. AskResponse (Answer + Sources)| AC
+com.yourorg.rag
+├── ingestion      (controller, service, logic, repository, model)
+├── conversation   (controller, service, logic, repository, model)
+├── rewrite        (service, logic, model)
+├── retrieval      (service, logic, model)
+├── generation     (service, logic, model)
+├── eval           (controller, service, logic, model)
+├── health         (OllamaHealthIndicator, DbHealthIndicator)
+├── config         (properties, CORS, beans)
+└── common         (exceptions, handler, logging filter)
 ```
 
 ---
 
-## 2. Component Architecture & Package Breakdown
+## Part 3: Endpoints
 
-Package root: `github.mralmostcool.chunk_norris`
+### Ingestion
+| Method | Path | Purpose | Success | Errors |
+|--------|------|---------|---------|--------|
+| POST | `/api/documents` | Multipart upload; triggers ingest | 201 `DocumentResponse` | 400 bad type, 409 duplicate, 413 too large, 503 Ollama down |
+| GET | `/api/documents` | List documents | 200 `List<DocumentResponse>` | |
+| GET | `/api/documents/{id}` | Get one document's metadata | 200 | 404 |
+| DELETE | `/api/documents/{id}` | Delete vectors + file + metadata | 204 | 404 |
 
-### 2.1 Configuration Layer (`{pkg}.config`)
-- **`RagProperties.java`**: Strongly-typed `@ConfigurationProperties(prefix = "rag")` holding system parameters (`chunkSize`, `topK`, `similarityThreshold`, `uploadDir`).
-- **`ChatClientConfig.java`**: Configures the Spring AI `ChatClient.Builder` bean connected to local Ollama chat model.
+### Conversation
+| Method | Path | Purpose | Success | Errors |
+|--------|------|---------|---------|--------|
+| POST | `/api/chat/conversations` | Create session | 201 `CreateSessionResponse` | |
+| POST | `/api/chat/conversations/{id}/messages` | Send message, get answer | 200 `ChatResponse` | 400 blank, 404 session, 503 LLM |
+| GET | `/api/chat/conversations/{id}/history` | Fetch messages | 200 | 404 |
+| DELETE | `/api/chat/conversations/{id}` | Clear session | 204 | 404 |
 
-### 2.2 Ingestion Module (`{pkg}.ingestion`)
-Handles physical storage, parsing, chunking, hashing, metadata enrichment, and database tracking.
-- **`DocumentController.java`**: REST endpoints (`POST /api/documents`, `GET /api/documents`, `DELETE /api/documents/{id}`) for file management.
-- **`IngestionService.java`**: Orchestrates duplicate detection, storage, reading, chunking, metadata enrichment, vector indexing, and status updates.
-- **`FileStorageService.java`**: Manages physical file persistence in `./data/uploads/`, filename sanitization, and file deletion.
-- **`DocumentReaderFactory.java`**: Wraps Spring AI `TikaDocumentReader` to extract raw structured text `Document` objects from PDF, MD, TXT files.
-- **`ChunkingService.java`**: Uses `TokenTextSplitter` configured via `RagProperties.chunkSize` to break raw documents into model-safe token blocks.
-- **`ContentHasher.java`**: Generates SHA-256 byte hashes and deterministic `UUID` chunk identifiers via `UUID.nameUUIDFromBytes`.
-- **`MetadataEnricher.java`**: Attaches standard audit and tracking keys (`documentId`, `filename`, `chunkIndex`, `fileHash`, `uploadedAt`) to each chunk.
-- **`DocumentRegistry.java`**: Plain `JdbcTemplate` repository interacting with `documents` SQL table to track processing status (`PENDING`, `PROCESSING`, `DONE`, `FAILED`).
+### Evaluation
+| Method | Path | Purpose | Success |
+|--------|------|---------|---------|
+| POST | `/api/eval/run` | Run golden set, return report | 200 `EvalReport` |
 
-### 2.3 Retrieval Module (`{pkg}.retrieval`)
-Isolates semantic vector search from LLM generation.
-- **`SearchController.java`**: Debug endpoint (`GET /api/search?q=...`) to test pure vector retrieval without invoking LLM.
-- **`RetrievalService.java`**: Queries `VectorStore` using `topK` and `similarityThreshold`. Optionally applies metadata filters when specific `documentIds` are provided.
-- **`SearchFilterBuilder.java`**: Constructs Spring AI metadata filter expressions for `documentId in [...]`.
+### Operations
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/actuator/health` | Aggregated UP/DOWN with Ollama and DB details |
 
-### 2.4 Chat & RAG Module (`{pkg}.chat`)
-Handles prompt generation, grounded reasoning, citation mapping, and endpoint execution.
-- **`AskController.java`**: Main REST API (`POST /api/ask`) accepting questions and optional document scope filters.
-- **`RagService.java`**: Executes RAG workflow: calls `RetrievalService`, formats chunk context into numbered blocks `[1]`, constructs prompt via `PromptTemplates`, invokes `ChatClient`, and attaches `SourceReference` list.
-- **`PromptTemplates.java`**: Loads and compiles external StringTemplate files (`prompts/rag-system.st`, `prompts/rag-user.st`).
-
-### 2.5 Evaluation Module (`{pkg}.evaluation`)
-Quantifies RAG performance.
-- **`EvaluationController.java`**: Exposes `/api/eval/run` to trigger batch testing against `eval/questions.json`.
-- **`EvaluationRunner.java`**: Measures hit rate, refusal accuracy, and latency.
-
-### 2.6 Health & Infrastructure (`{pkg}.common`)
-- **`GlobalExceptionHandler.java`**: `@RestControllerAdvice` mapping domain exceptions (`UnsupportedFileTypeException`, `DocumentNotFoundException`) to RFC 7807 `ProblemDetail`.
-- **`OllamaHealthIndicator.java`**: Custom Spring Boot Actuator health check pinging local Ollama service.
+Optional but useful during development: `POST /api/debug/retrieve` (query in, raw chunks with scores out). It is the fastest way to tune threshold and topK before the full chat flow exists. Remove or profile-gate it later.
 
 ---
 
-## 3. Data Schema & Persistence
+## Part 4: Tickets
 
-### 3.1 Document Registry Table (`documents`)
-```sql
-CREATE TABLE IF NOT EXISTS documents (
-    id UUID PRIMARY KEY,
-    filename TEXT NOT NULL,
-    file_hash TEXT UNIQUE NOT NULL,
-    status TEXT NOT NULL,
-    chunk_count INT DEFAULT 0,
-    stored_path TEXT NOT NULL,
-    uploaded_at TIMESTAMPTZ NOT NULL
-);
-```
-
-### 3.2 Vector Store Table (`vector_store`)
-Managed automatically by Spring AI pgvector integration:
-- `id`: UUID (Deterministic from file hash + chunk index)
-- `content`: TEXT (chunk text snippet)
-- `metadata`: JSONB (`documentId`, `filename`, `chunkIndex`, `fileHash`, `uploadedAt`)
-- `embedding`: VECTOR(768) (`nomic-embed-text-v2-moe`) with Cosine distance index (HNSW).
+Conventions used below:
+- **Epic** = a module or phase. **Story/Task** = one deliverable, roughly half a day to two days.
+- Each ticket has **Acceptance Criteria (AC)**. A ticket is done when every AC passes.
+- Ticket IDs are `RAG-<number>`. Do them roughly in order; dependencies are noted.
+- Every ticket implicitly includes: unit tests for the logic you added, and no regression in earlier tests.
 
 ---
 
-## 4. Module Inter-Communication & Flow Rules
+### EPIC 0: Project Foundation
 
-1. **Ingestion Loop**:
-   `DocumentController` -> `IngestionService` -> `FileStorageService` & `DocumentRegistry` -> `DocumentReaderFactory` -> `ChunkingService` -> `MetadataEnricher` -> `VectorStore`
-2. **Idempotency Rule**:
-   If `ContentHasher.sha256(file)` matches an existing entry in `DocumentRegistry`, ingestion halts immediately and returns `duplicate: true`.
-3. **Retrieval Refusal Rule**:
-   If `RetrievalService` finds no chunks meeting `rag.similarity-threshold`, `RagService` returns fixed refusal message immediately without calling Ollama (saves GPU compute).
-4. **Citation Contract**:
-   Every context chunk supplied to LLM is tagged `[1]`, `[2]`. System prompt enforces returning bracketed citations matching items in `sources` response array.
+**RAG-001: Bootstrap the Spring Boot project**
+- Create the project with Java 21 (or 17), Maven or Gradle.
+- Dependencies: web, validation, actuator, jdbc, postgresql driver, Spring AI (ollama starter, pgvector store starter, tika document reader), lombok (optional), test starters.
+- Pin the Spring AI BOM version.
+- AC: app starts on port 8080; `/actuator/health` returns UP with no other config.
+
+**RAG-002: Establish package structure and layering rules**
+- Create the packages from Part 2.
+- Add a short `CONTRIBUTING.md` line: controllers never call repositories directly.
+- AC: empty packages committed; a sample ArchUnit test (optional) enforces the rule.
+
+**RAG-003: Externalize configuration**
+- `application.yml` with Ollama base URL, chat model, embedding model, datasource, and pgvector settings (dimensions, index type, distance type).
+- Custom `@ConfigurationProperties` classes: `RagProperties` (chunkSize, chunkOverlap, topK, similarityThreshold, memoryWindow, maxUploadBytes, uploadDir).
+- Add `application-local.yml` for your machine.
+- AC: all values injectable; changing topK in yml changes behavior without code changes.
+
+**RAG-004: Docker Compose and local runbook**
+- Document (or codify) how the existing pgvector container and Ollama are started; add the `docker-compose.yml` for Postgres if not already committed.
+- README section: prerequisites, `ollama pull` commands, how to run.
+- AC: a fresh clone plus README gets a teammate running in under 15 minutes.
+
+**RAG-005: Global exception handling and error contract**
+- `@ControllerAdvice` returning a consistent error body `{timestamp, status, code, message, path, correlationId}`.
+- Custom exceptions: `DocumentNotFoundException`, `SessionNotFoundException`, `LlmUnavailableException`, `UnsupportedFileTypeException`, `DuplicateDocumentException`.
+- Map to 404 / 404 / 503 / 400 / 409.
+- AC: each exception has a controller-slice test asserting status and body shape.
+
+**RAG-006: Correlation ID and request logging filter**
+- Servlet filter generating or propagating `X-Correlation-Id`, placing it in MDC; log pattern includes it.
+- AC: every log line for a request shares the same ID; the ID is returned in the response header.
+
+---
+
+### EPIC 1: Infrastructure Connectivity (Vector DB + Ollama)
+
+**RAG-010: Database schema migrations**
+- Add Flyway (or Liquibase). Migrations for: `CREATE EXTENSION IF NOT EXISTS vector`, `documents`, `chat_sessions`, `chat_messages`.
+- Let Spring AI manage `vector_store`, or create it via migration and disable auto-init (pick one and document it).
+- Indexes: `documents(checksum)` unique, `chat_messages(conversation_id, created_at)`.
+- AC: an empty database becomes fully usable by starting the app; migrations are idempotent.
+
+**RAG-011: Verify Ollama connectivity and models**
+- Small smoke test (a runner or an integration test) that calls the chat model with "say ok" and the embedding model with a short string.
+- Confirm the embedding dimension matches the `vector_store` column dimension. This is the most common setup bug, so record the number in the README.
+- AC: test passes against your local Ollama; a mismatch produces a clear failure message.
+
+**RAG-012: Verify VectorStore round trip**
+- Integration test: add 3 tiny documents with metadata, run `similaritySearch`, assert the expected one ranks first, then delete by filter and assert gone.
+- Use Testcontainers (pgvector image) so it does not depend on your dev DB.
+- AC: passes in CI-style isolation; teaches you the `Document`, `SearchRequest` and `Filter.Expression` APIs before you build on them.
+
+**RAG-013: Health indicators (Module 7)**
+- `OllamaHealthIndicator`: ping Ollama, verify both configured models are present.
+- `DbHealthIndicator`: connectivity plus `pgvector` extension check.
+- AC: stopping Ollama flips `/actuator/health` to DOWN with a useful detail message; same for stopping Postgres.
+
+---
+
+### EPIC 2: Document Ingestion (Module 1)
+
+**RAG-020: Document model, DTOs and repository**
+- `Document` entity fields: id (UUID), filename, contentType, sizeBytes, checksum, chunkCount, uploadedAt, status (`PROCESSING`, `READY`, `FAILED`).
+- `DocumentRepository` with JdbcTemplate: `insert`, `findAll`, `findById`, `findByChecksum`, `updateStatus`, `updateChunkCount`, `deleteById`.
+- DTOs: `DocumentResponse`, `DocumentUploadRequest`.
+- AC: repository integration tests (Testcontainers) cover every method.
+
+**RAG-021: File storage component**
+- Save raw uploads to `./data/uploads/{docId}/{filename}`; delete by docId.
+- Sanitize filenames (prevent path traversal).
+- AC: unit tests for path sanitization; deleting a doc removes its directory.
+
+**RAG-022: Upload validation**
+- Allow-list of types: PDF, DOCX, TXT, HTML (check both extension and detected MIME type via Tika, not just the header).
+- Enforce max size; configure multipart limits in yml.
+- AC: wrong type returns 400, oversized returns 413, empty file returns 400.
+
+**RAG-023: Checksum and duplicate detection**
+- SHA-256 of file bytes; reject with 409 if the checksum already exists in `READY` state.
+- Decide and document the behavior for a duplicate of a `FAILED` doc (recommended: allow re-ingest).
+- AC: uploading the same file twice yields 201 then 409.
+
+**RAG-024: Parsing with TikaDocumentReader**
+- Wrap Tika in a `DocumentParser` logic class returning text plus metadata.
+- Handle empty or unparseable files with a clear exception (mark doc `FAILED`).
+- AC: fixture PDF, DOCX, TXT and HTML files each parse to non-empty text in tests.
+
+**RAG-025: Chunking with TokenTextSplitter**
+- Configure chunk size and overlap from `RagProperties`.
+- Attach metadata to every chunk: `docId`, `filename`, `chunkIndex`, `page` (when available).
+- AC: unit test asserts chunk count for a known input, overlap is respected, and every chunk carries all four metadata keys.
+
+**RAG-026: Embed and store**
+- Push chunks into `VectorStore.add()` (embedding happens through the `EmbeddingModel`).
+- Batch large documents to avoid Ollama timeouts.
+- Update `chunkCount` and set status `READY` on success, `FAILED` (with reason) on error.
+- AC: after upload, `SELECT count(*) FROM vector_store WHERE metadata->>'docId' = ?` equals `chunkCount`.
+
+**RAG-027: IngestionService orchestration**
+- Flow: validate → checksum → register (`PROCESSING`) → save file → parse → chunk → embed/store → mark `READY`.
+- On any failure after registration, compensate: remove partial vectors and file, mark `FAILED`.
+- Decide sync vs async. For v1, sync is fine; note that large PDFs will hold the request open (an async ticket is in the backlog).
+- AC: failure injected at each stage leaves no orphan vectors or files.
+
+**RAG-028: Document endpoints**
+- `POST /api/documents`, `GET /api/documents`, `GET /api/documents/{id}`.
+- AC: controller-slice tests plus one end-to-end test uploading a real small PDF.
+
+**RAG-029: Delete document**
+- `DELETE /api/documents/{id}` removes vectors (filter by `docId` metadata), the file, then the metadata row.
+- Order matters: delete vectors first, row last, so a partial failure is retryable.
+- AC: after delete, similarity search for that document's content returns nothing; a second delete returns 404.
+
+**RAG-030: Update/re-ingest a document (covers your "updation" objective)**
+- `PUT /api/documents/{id}` (or delete-then-upload): replaces file, deletes old vectors, re-chunks and re-embeds.
+- AC: after update, old content is no longer retrievable and new content is.
+
+---
+
+### EPIC 3: Retrieval (Module 4)
+
+**RAG-040: Retrieval models and config**
+- `RetrievedChunk`, `RetrievalConfig` (topK, similarityThreshold) bound to properties.
+- AC: config visible and overridable per environment.
+
+**RAG-041: Basic RetrievalService**
+- `retrieve(query, docFilters)` using `VectorStore.similaritySearch` with topK and threshold.
+- Return an empty list when nothing passes the threshold (do not pad with weak matches).
+- AC: integration test with seeded chunks: relevant query returns hits, gibberish query returns empty.
+
+**RAG-042: Metadata filter builder**
+- Logic class producing a `docId IN (...)` filter expression from optional document ids.
+- AC: unit tests for null, empty, single and multiple ids; integration test proving filtering restricts results.
+
+**RAG-043: De-duplication of near-identical chunks**
+- Drop chunks whose text is near-identical (normalized-text hash, or overlap ratio above a threshold). Overlapping chunks from adjacent windows are the usual culprit.
+- AC: unit test with overlapping chunks yields a reduced list preserving highest score.
+
+**RAG-044: Citation index assignment**
+- Assign `[1]..[N]` in ranked order after dedup.
+- AC: indexes are contiguous and stable for a given result list.
+
+**RAG-045: Debug retrieval endpoint (temporary)**
+- `POST /api/debug/retrieve` returning chunks and scores.
+- Use it to tune `topK` and `similarityThreshold` on your real documents and record the chosen values with reasoning.
+- AC: documented threshold rationale in the README or an ADR.
+
+---
+
+### EPIC 4: Prompt Engine and Generation (Module 5)
+
+**RAG-050: Prompt models**
+- `PromptBundle` (system, history, context, question) and `GeneratedAnswer` (text, citedIndexes).
+- AC: immutable records with tests for construction.
+
+**RAG-051: ConversationalPromptEngine**
+- System prompt with grounding rules: answer only from context; cite as `[n]`; say you do not know when context is insufficient.
+- Blocks: history, numbered context, question.
+- Store the prompt text in a resource file (`prompts/system.st`), not in Java strings.
+- AC: golden-string unit tests on the assembled prompt for a fixed input.
+
+**RAG-052: AnswerGenerationService**
+- Call `ChatClient.prompt()...call()`.
+- Wrap Ollama failures in `LlmUnavailableException`; set timeouts.
+- AC: mocked ChatClient tests for success, timeout and connection failure.
+
+**RAG-053: Citation extraction**
+- Parse `[n]` markers from the answer; discard indexes that do not exist in the supplied context (model hallucinated citations).
+- AC: unit tests: valid citations, out-of-range citation dropped, no citations returns an empty list.
+
+**RAG-054: Token budget guard**
+- Estimate tokens for system + history + context + question; trim context (lowest score first) then history if over budget for the model's context window.
+- AC: an oversized input is trimmed rather than failing; test asserts what got dropped.
+
+---
+
+### EPIC 5: Query Rewriting (Module 3)
+
+**RAG-060: Rewrite models and prompt template**
+- `RewriteRequest`, `RewriteResult {standaloneQuery, wasRewritten}`.
+- Prompt template: resolve pronouns using recent history, output only the search query. Keep it in a resource file.
+- AC: template renders correctly for a sample history.
+
+**RAG-061: QueryRewriterService**
+- Skip when history is empty (`wasRewritten=false`).
+- Call the LLM otherwise; fall back to the original question on failure.
+- AC: tests for empty history, success, and LLM failure fallback.
+
+**RAG-062: Output sanitizer**
+- Strip surrounding quotes, "Standalone question:" style preambles, and trailing explanations; cap length.
+- AC: unit tests with messy model outputs.
+
+**RAG-063: Rewrite quality check**
+- Manually try 10 follow-up pairs ("What about its price?" after a question about a product) and record before/after in a doc. This sets your expectation for how well a 7B model rewrites, and feeds the eval set later.
+- AC: results table committed; obvious failures inform prompt tweaks.
+
+---
+
+### EPIC 6: Conversation and Memory (Module 2)
+
+**RAG-070: Session models and repository**
+- `ChatSession`, `ChatMessage`, `Role` enum; DTOs `CreateSessionResponse`, `ChatRequest`, `ChatResponse {conversationId, answer, sources, historySnippet}`.
+- `ChatSessionRepository`: `createSession`, `findSession`, `deleteSession`, `insertMessage`, `findRecentMessages`, `touchLastActive`.
+- AC: repository integration tests; deleting a session cascades to its messages.
+
+**RAG-071: Window trimming logic**
+- Keep the last N messages (default 6), preserve user/assistant pairing (never start the window with an orphan assistant message), apply the token guard.
+- AC: unit tests for odd counts, fewer than N, and pairing edge cases.
+
+**RAG-072: ChatMemoryService**
+- `getConversationHistory(id)`, `appendMessagePair(id, user, assistant)`, `clearConversation(id)`.
+- Append the pair only after a successful answer, so failures do not leave half-turns.
+- AC: tests including the failure path.
+
+**RAG-073: ConversationalRagService (core orchestration)**
+- The five steps: load memory → rewrite → retrieve → generate → save.
+- Refusal path: if retrieval returns empty, return a fixed "I could not find this in the documents" answer without calling the LLM, and still save the turn.
+- Populate `sources` from the cited chunks (filename, page, snippet).
+- AC: service test with all collaborators mocked covering normal, empty history, empty retrieval, and LLM failure.
+
+**RAG-074: Session endpoints**
+- `POST /api/chat/conversations`, `GET .../history`, `DELETE ...`.
+- AC: controller-slice tests including 404 for unknown ids.
+
+**RAG-075: Message endpoint**
+- `POST /api/chat/conversations/{id}/messages` with validation (non-blank, max length).
+- AC: end-to-end test: upload doc → create session → ask → cited answer; then a pronoun follow-up returns a sensible answer.
+
+**RAG-076: Optional Spring AI ChatMemory integration**
+- Your diagram marks this "optional". Evaluate whether Spring AI's advisor-based memory is worth adopting versus your own service. Record the decision as a short ADR. Keeping your own gives you control of the pairing and token rules, which is why it is the default recommendation.
+- AC: ADR committed.
+
+---
+
+### EPIC 7: Evaluation Harness (Module 6)
+
+**RAG-080: Golden dataset**
+- Create a JSON/YAML file of 20 to 30 cases: `question`, `expectedDocs`, `expectedAnswer` (short key facts), plus 5 to 8 out-of-scope questions flagged `shouldRefuse=true`.
+- Build it from documents you have actually ingested.
+- AC: dataset committed and loadable.
+
+**RAG-081: Metric calculators**
+- Retrieval hit-rate / recall@k: did an expected doc appear in the retrieved set?
+- Groundedness / citation check: does every citation index exist, and does the answer contain at least one?
+- Refusal accuracy: refused when it should, answered when it should.
+- Answer similarity: start simple (key-fact containment or embedding cosine against the expected answer); avoid LLM-as-judge in v1.
+- AC: unit tests for each metric using hand-built inputs.
+
+**RAG-082: EvalService and endpoint**
+- Run each case through `ConversationalRagService` (fresh session per case), capture latency, aggregate into `EvalReport` (totals, averages, failures list).
+- `POST /api/eval/run`.
+- AC: a run over the golden set returns a report; you can compare before/after changing topK.
+
+**RAG-083: Baseline and tuning log**
+- Record the baseline scores, then change one parameter at a time (chunk size, overlap, topK, threshold) and log the effect.
+- AC: tuning table committed; chosen defaults justified by numbers.
+
+---
+
+### EPIC 8: Hardening and Delivery
+
+**RAG-090: Test coverage pass**
+- Ensure logic classes have unit tests, repositories have Testcontainers tests, controllers have slice tests, and there is at least one full-flow test.
+- AC: coverage report generated; gaps in critical paths closed.
+
+**RAG-091: Input hardening**
+- Bound message length, sanitize filenames and metadata, guard against prompt-injection text in documents by keeping the system prompt authoritative and delimiting context clearly.
+- AC: a document containing "ignore previous instructions" does not change the system behavior in a manual test.
+
+**RAG-092: Observability**
+- Request metrics (timers around retrieval, generation, ingestion) via Micrometer; expose in actuator.
+- AC: metrics visible for stage latencies.
+
+**RAG-093: API documentation**
+- Add springdoc-openapi; annotate DTOs.
+- AC: Swagger UI lists every endpoint with example payloads.
+
+**RAG-094: CORS and multipart limits**
+- Configure allowed origins and upload limits from properties.
+- AC: verified from a browser client or curl with preflight.
+
+**RAG-095: Packaging**
+- Dockerfile for the app, compose file joining app + Postgres, README run instructions.
+- AC: `docker compose up` brings the whole stack up (Ollama can stay on the host).
+
+---
+
+### Backlog (post v1)
+
+- **RAG-B01**: Async ingestion with a job status endpoint (`GET /api/documents/{id}/status`).
+- **RAG-B02**: Streaming answers (SSE) from the message endpoint.
+- **RAG-B03**: Hybrid search (keyword + vector) and re-ranking.
+- **RAG-B04**: Per-document or per-user scoping and authentication.
+- **RAG-B05**: Conversation summarization for long chats (beyond the sliding window).
+- **RAG-B06**: OCR for scanned PDFs.
+
+---
+
+## Part 5: Suggested Order and Milestones
+
+| Milestone | Tickets | What you can demo |
+|-----------|---------|-------------------|
+| M0: Skeleton | 001 to 006 | App runs, errors are consistent |
+| M1: Plumbing | 010 to 013 | DB schema, Ollama and vector round trip proven, health checks |
+| M2: Ingestion | 020 to 030 | Upload, list, delete, update documents |
+| M3: Retrieval | 040 to 045 | Debug endpoint returns tuned, cited chunks |
+| M4: Single-turn RAG | 050 to 054 | Grounded answers with citations (call the services from a test or temporary endpoint) |
+| M5: Conversation | 060 to 076 | Multi-turn chat with rewriting and memory |
+| M6: Evaluation | 080 to 083 | Scored report and tuned defaults |
+| M7: Delivery | 090 to 095 | Documented, hardened, containerized |
+
+Note: M4 can be reached before Epic 5 and 6 by wiring Retrieval → Prompt → Generation directly. That gives you a working (non-conversational) RAG early, which is the most motivating checkpoint in the project.
+
+---
+
+## Part 6: Common Pitfalls to Watch For
+
+1. **Embedding dimension mismatch** between the model output and the `vector_store` column. Check in RAG-011.
+2. **Threshold too strict or too loose**: score meaning depends on the distance metric. Tune with RAG-045, not by guessing.
+3. **Orphan vectors** when ingestion fails midway. RAG-027 and RAG-029 exist to prevent this.
+4. **Chunk overlap producing duplicate context**: RAG-043.
+5. **Small model rewriting badly**: it may invent details. Keep the fallback, sanitizer, and rewrite length cap.
+6. **Prompt drift**: keep prompts in resource files with golden tests so a casual edit does not silently change behavior.
+7. **Ollama context window default is small**: set `num_ctx` explicitly in Spring AI Ollama options, or your long context will be silently truncated.
