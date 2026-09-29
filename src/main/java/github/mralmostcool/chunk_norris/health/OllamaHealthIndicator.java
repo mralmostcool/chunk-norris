@@ -15,6 +15,7 @@ public class OllamaHealthIndicator implements HealthIndicator {
     private final OllamaApi ollamaApi;
 
     @Override
+    @SuppressWarnings("null")
     public Health health() {
         try {
             OllamaApi.ListModelResponse response = ollamaApi.listModels();
