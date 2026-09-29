@@ -31,10 +31,3 @@ build/
 
 ### VS Code ###
 .vscode/
-
-### docker compose folder
-data/*
-!data/.gitkeep
-
-**/data/postgres/
-**/data/kafka/
