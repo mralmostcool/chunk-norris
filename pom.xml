@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>github.mralmostcool</groupId>
 	<artifactId>chunk-norris</artifactId>
-	<version>0.3.0-SNAPSHOT</version>
+	<version>0.4.0-SNAPSHOT</version>
 	<name/>
 	<description/>
 	<url/>
@@ -186,6 +186,13 @@
 						</configuration>
 					</execution>
 				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off</argLine>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

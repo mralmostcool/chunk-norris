@@ -20,6 +20,24 @@ spring:
   docker:
     compose:
       lifecycle-management: none
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+          model: qwen2.5:7b
+          num-ctx: 8192
+          temperature: 0.2
+      embedding:
+        options:
+          model: nomic-embed-text-v2-moe
+    vectorstore:
+      pgvector:
+        table-name: vector_store
+        initialize-schema: false
+        dimensions: 768
+        distance-type: COSINE_DISTANCE
+        index-type: HNSW
 
 
 springdoc:

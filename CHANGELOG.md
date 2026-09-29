@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0-SNAPSHOT] - 2026-09-29
+
+### Added
+- Actuator health indicators for Ollama and PostgreSQL (RAG-013).
+- `OllamaHealthIndicator` verifying connectivity and presence of configured chat and embedding models.
+- `DbHealthIndicator` verifying database connectivity and `pgvector` extension installation.
+- Unit tests `DbHealthIndicatorTest` and `OllamaHealthIndicatorTest` covering UP, DOWN, missing extension, and missing model scenarios.
+- `maven-surefire-plugin` configuration with JVM flag `-XX:+EnableDynamicAgentLoading` to suppress JDK 21+ Mockito agent warnings.
+
+### Changed
+- Moved Spring AI Ollama and vectorstore configurations from `application-local.yml` to base `application.yaml`.
+
 ## [0.3.0-SNAPSHOT] - 2026-09-29
 
 ### Added
