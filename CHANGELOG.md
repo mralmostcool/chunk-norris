@@ -5,9 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0-SNAPSHOT] - 2026-09-29
+## [0.4.0-SNAPSHOT] - 2026-09-30
 
 ### Added
+- `FileStorageService` for raw upload persistence under `./data/uploads/{docId}/{filename}`, path traversal sanitization, and docId-scoped deletion (RAG-021).
+- `UploadValidator` for file validation: allow-list (PDF, DOCX, TXT, HTML), Apache Tika MIME detection, max size enforcement, and empty file check (RAG-022).
+- Exceptions `EmptyFileException`, `InvalidFilenameException`, and `FileStorageException`.
+- Unit tests `FileStorageServiceTest` and `UploadValidatorTest`.
+- Document model, repository, and DTOs (RAG-020).
 - Actuator health indicators for Ollama and PostgreSQL (RAG-013).
 - `OllamaHealthIndicator` verifying connectivity and presence of configured chat and embedding models.
 - `DbHealthIndicator` verifying database connectivity and `pgvector` extension installation.
@@ -15,7 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `maven-surefire-plugin` configuration with JVM flag `-XX:+EnableDynamicAgentLoading` to suppress JDK 21+ Mockito agent warnings.
 
 ### Changed
+- Configured default `rag:` properties block in base `application.yaml`.
 - Moved Spring AI Ollama and vectorstore configurations from `application-local.yml` to base `application.yaml`.
+
 
 ## [0.3.0-SNAPSHOT] - 2026-09-29
 

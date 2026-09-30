@@ -68,3 +68,12 @@ management:
 logging:
   pattern:
     console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-no-corr-id}] %logger{36} - %msg%n"
+
+rag:
+  chunk-size: 300
+  chunk-overlap: 50
+  top-k: 4
+  similarity-threshold: 0.5
+  memory-window: 10
+  max-upload-bytes: 20971520 # 20MB
+  upload-dir: data/uploads
