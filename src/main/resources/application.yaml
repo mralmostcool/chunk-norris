@@ -1,0 +1,79 @@
+server:
+  shutdown: graceful
+
+
+spring:
+  profiles:
+    active: local
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  application:
+    name: chunk-norris
+  datasource:
+    url: jdbc:postgresql://localhost:5432/chunknorris
+    username: chunknorris
+    password: chunknorris
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+  docker:
+    compose:
+      lifecycle-management: none
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+          model: qwen2.5:7b
+          num-ctx: 8192
+          temperature: 0.2
+      embedding:
+        options:
+          model: nomic-embed-text-v2-moe
+    vectorstore:
+      pgvector:
+        table-name: vector_store
+        initialize-schema: false
+        dimensions: 768
+        distance-type: COSINE_DISTANCE
+        index-type: HNSW
+
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
+
+scalar:
+  enabled: true
+  path: /scalar
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, shutdown
+  endpoint:
+    health:
+      show-details: always
+    shutdown:
+      enabled: true
+
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-no-corr-id}] %logger{36} - %msg%n"
+
+rag:
+  chunk-size: 300
+  chunk-overlap: 50
+  top-k: 4
+  similarity-threshold: 0.5
+  memory-window: 10
+  max-upload-bytes: 20971520 # 20MB
+  upload-dir: data/uploads
