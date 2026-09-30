@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-09-30  
 **Active Branch:** `dev`  
-**Current Version:** `0.4.0-SNAPSHOT`  
+**Current Version:** `0.5.0-SNAPSHOT`  
 **Java Version:** Java 21 (Spring Boot 4.1.1, Spring AI 2.0.1)
 
 ---
