@@ -35,3 +35,8 @@ build/
 ### docker compose folder
 data/*
 !data/.gitkeep
+
+### Dotenv ###
+.env
+.env.*
+!.env.example
