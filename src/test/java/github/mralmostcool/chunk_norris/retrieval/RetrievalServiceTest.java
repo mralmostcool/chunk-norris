@@ -34,7 +34,7 @@ class RetrievalServiceTest {
     @BeforeEach
     void setUp() {
         retrievalConfig = new RetrievalConfig(4, 0.6);
-        retrievalService = new RetrievalService(vectorStore, retrievalConfig);
+        retrievalService = new RetrievalService(vectorStore, retrievalConfig, new MetadataFilterBuilder());
     }
 
     @Test

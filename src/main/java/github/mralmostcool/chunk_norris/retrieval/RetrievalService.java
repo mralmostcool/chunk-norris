@@ -18,10 +18,15 @@ public class RetrievalService {
 
     private final VectorStore vectorStore;
     private final RetrievalConfig retrievalConfig;
+    private final MetadataFilterBuilder metadataFilterBuilder;
 
-    public RetrievalService(VectorStore vectorStore, RetrievalConfig retrievalConfig) {
+    public RetrievalService(
+            VectorStore vectorStore,
+            RetrievalConfig retrievalConfig,
+            MetadataFilterBuilder metadataFilterBuilder) {
         this.vectorStore = vectorStore;
         this.retrievalConfig = retrievalConfig;
+        this.metadataFilterBuilder = metadataFilterBuilder != null ? metadataFilterBuilder : new MetadataFilterBuilder();
     }
 
     public List<RetrievedChunk> retrieve(String query) {
@@ -30,6 +35,19 @@ public class RetrievalService {
 
     public List<RetrievedChunk> retrieve(String query, Filter.Expression docFilters) {
         return retrieve(query, docFilters, null, null);
+    }
+
+    public List<RetrievedChunk> retrieve(String query, java.util.Collection<java.util.UUID> docIds) {
+        return retrieve(query, docIds, null, null);
+    }
+
+    public List<RetrievedChunk> retrieve(
+            String query,
+            java.util.Collection<java.util.UUID> docIds,
+            Integer topK,
+            Double similarityThreshold) {
+        Filter.Expression filter = metadataFilterBuilder.buildDocIdFilter(docIds);
+        return retrieve(query, filter, topK, similarityThreshold);
     }
 
     public List<RetrievedChunk> retrieve(
