@@ -1,0 +1,2 @@
+Chunk Norris is a powerful RAG application built with Spring Boot and Spring AI.
+It parses documents, chunks them into semantic pieces, and embeds them into pgvector.

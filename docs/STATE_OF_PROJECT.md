@@ -59,8 +59,12 @@ FileStorageService  UploadValidator  DocumentRepository
   - Migration: `V5__relax_failed_checksum_unique_constraint.sql` allows duplicate checksum when status is `FAILED`.
   - Duplicate detection rule: 409 `DuplicateDocumentException` on `READY` or active duplicates; re-ingest allowed on `FAILED`.
   - Tests: `ChecksumServiceTest`, `DocumentRepositoryIntegrationTest`.
-- [ ] **RAG-024: Parsing with TikaDocumentReader** (Next up)
-- [ ] **RAG-025: Chunking with TokenTextSplitter**
+- [x] **RAG-024: Parsing with TikaDocumentReader**
+  - Component: `DocumentParser` wrapping Spring AI `TikaDocumentReader`.
+  - Exception: `DocumentParsingException` (422 UNPROCESSABLE_CONTENT) for empty/unparseable files.
+  - Fixtures: `sample.pdf`, `sample.docx`, `sample.txt`, `sample.html`.
+  - Tests: `DocumentParserTest` verifying all formats parse to non-empty text.
+- [ ] **RAG-025: Chunking with TokenTextSplitter** (Next up)
 - [ ] **RAG-026: Embed and Store**
 - [ ] **RAG-027: IngestionService Orchestration**
 - [ ] **RAG-028: Document Endpoints** (`/api/documents`)
@@ -70,8 +74,8 @@ FileStorageService  UploadValidator  DocumentRepository
 ---
 
 ## 3. Test Suite Status
-- Total Tests: 58
-- Passing: 58
+- Total Tests: 64
+- Passing: 64
 - Failures: 0
 - Errors: 0
 - Skipped: 0
