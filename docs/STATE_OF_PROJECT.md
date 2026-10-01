@@ -88,18 +88,41 @@ FileStorageService  UploadValidator  DocumentRepository
   - Pipeline: file validation -> old vector deletion -> file replacement -> re-parsing -> re-chunking -> re-embedding -> metadata update.
   - Tests: `DocumentUpdateIntegrationTest` verifying old content unretrievable and new content retrievable, `DocumentControllerTest`, and `IngestionServiceTest`.
 
+### Milestone 3: Retrieval (Module 4) ✅
+- [x] **RAG-040: Retrieval models and config**
+  - Models: `RetrievedChunk` (record with id, text, metadata, score, citationIndex).
+  - Config: `RetrievalConfig` (topK, similarityThreshold) bound to `rag.retrieval.*` with defaults (topK=4, similarityThreshold=0.50).
+  - Tests: `RetrievedChunkTest`, `RetrievalConfigTest`.
+- [x] **RAG-041: Basic RetrievalService**
+  - Service: `RetrievalService` executing `vectorStore.similaritySearch` with topK and similarityThreshold.
+  - Returns empty list when no matches pass threshold (no weak padding).
+  - Tests: `RetrievalServiceTest` and `RetrievalServiceIntegrationTest` (seeded hits vs gibberish query).
+- [x] **RAG-042: Metadata filter builder**
+  - Component: `MetadataFilterBuilder` constructing `docId IN (...)` `Filter.Expression` from optional UUID collection.
+  - Tests: `MetadataFilterBuilderTest` (null, empty, single, multiple, dedup) and `MetadataFilterIntegrationTest` (query isolation).
+- [x] **RAG-043: De-duplication of near-identical chunks**
+  - Component: `ChunkDeduplicator` dropping normalized-text matches and window overlaps (default threshold 0.70) while preserving highest score.
+  - Tests: `ChunkDeduplicatorTest`, `RetrievalServiceTest`.
+- [x] **RAG-044: Citation index assignment**
+  - Component: `CitationIndexer` assigning contiguous stable `[1]..[N]` citation indices in ranked order after dedup.
+  - Tests: `CitationIndexerTest`, `RetrievalServiceTest`.
+- [x] **RAG-045: Debug retrieval endpoint & tuning rationale**
+  - Controller: `DebugRetrievalController` exposing `POST /api/debug/retrieve` returning chunks with scores.
+  - ADR: `docs/adr/002-retrieval-threshold-and-topk-tuning.md` and `README.md` documenting threshold rationale (0.50) and topK (4).
+  - Tests: `DebugRetrievalControllerTest` (WebMvc slice) and `DebugRetrievalIntegrationTest` (Testcontainers pgvector).
+
 ---
 
 ## 3. Test Suite Status
-- Total Tests: 92
-- Passing: 92
+- Total Tests: 127
+- Passing: 127
 - Failures: 0
 - Errors: 0
 - Skipped: 0
 - Key Test Slices:
-  - Unit tests: `FileStorageServiceTest`, `UploadValidatorTest`, `DbHealthIndicatorTest`, `OllamaHealthIndicatorTest`, `CorrelationIdFilterTest`.
-  - WebMvc slices: `GlobalExceptionHandlerTest`.
-  - Testcontainers / Integration: `DocumentRepositoryIntegrationTest`, `VectorStoreRoundTripIntegrationTest`, `OllamaSmokeIntegrationTest`.
+  - Unit tests: `FileStorageServiceTest`, `UploadValidatorTest`, `DbHealthIndicatorTest`, `OllamaHealthIndicatorTest`, `CorrelationIdFilterTest`, `RetrievalConfigTest`, `RetrievedChunkTest`, `RetrievalServiceTest`, `MetadataFilterBuilderTest`, `ChunkDeduplicatorTest`, `CitationIndexerTest`.
+  - WebMvc slices: `GlobalExceptionHandlerTest`, `DocumentControllerTest`, `DebugRetrievalControllerTest`.
+  - Testcontainers / Integration: `DocumentRepositoryIntegrationTest`, `VectorStoreRoundTripIntegrationTest`, `OllamaSmokeIntegrationTest`, `RetrievalServiceIntegrationTest`, `MetadataFilterIntegrationTest`, `DebugRetrievalIntegrationTest`.
 
 ---
 
