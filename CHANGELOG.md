@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0-SNAPSHOT] - 2026-10-01
+
+### Added
+- `RetrievedChunk` and `RetrievalConfig` configuration models bound to `rag.retrieval.*` (RAG-040).
+- `RetrievalService` for vector similarity search with threshold filtering (RAG-041).
+- `MetadataFilterBuilder` for building `docId IN (...)` filter expressions (RAG-042).
+- `ChunkDeduplicator` dropping normalized-text matches and window overlaps while preserving highest score (RAG-043).
+- `CitationIndexer` assigning contiguous stable `[1]..[N]` citation indices in ranked order after dedup (RAG-044).
+- `DebugRetrievalController` exposing `POST /api/debug/retrieve` (RAG-045).
+- `ADR 002`: Retrieval similarity threshold and topK baseline tuning rationale.
+
 ## [0.5.0-SNAPSHOT] - 2026-09-30
 
 ### Added

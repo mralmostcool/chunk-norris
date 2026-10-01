@@ -1,8 +1,8 @@
 # State of the Project
 
-**Last Updated:** 2026-09-30  
+**Last Updated:** 2026-10-01  
 **Active Branch:** `dev`  
-**Current Version:** `0.5.0-SNAPSHOT`  
+**Current Version:** `0.6.0-SNAPSHOT`  
 **Java Version:** Java 21 (Spring Boot 4.1.1, Spring AI 2.0.1)
 
 ---
