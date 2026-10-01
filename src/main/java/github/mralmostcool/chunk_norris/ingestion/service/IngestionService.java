@@ -100,6 +100,30 @@ public class IngestionService {
         }
     }
 
+    public void delete(UUID docId) {
+        deleteDocument(docId);
+    }
+
+    public void deleteDocument(UUID docId) {
+        if (docId == null) {
+            throw new IllegalArgumentException("docId must not be null");
+        }
+
+        // 1. Verify document exists
+        documentRepository.findById(docId)
+                .orElseThrow(() -> new github.mralmostcool.chunk_norris.common.exceptions.DocumentNotFoundException(docId.toString()));
+
+        // 2. Delete vectors first
+        vectorBatchService.deleteByDocId(docId);
+
+        // 3. Delete physical files
+        fileStorageService.delete(docId);
+
+        // 4. Delete document metadata row
+        documentRepository.deleteById(docId);
+    }
+
+
     private void compensate(UUID docId, String failureReason) {
         // Compensate: remove partial vectors
         try {

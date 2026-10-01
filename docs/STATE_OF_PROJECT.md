@@ -79,8 +79,11 @@ FileStorageService  UploadValidator  DocumentRepository
 - [x] **RAG-028: Document Endpoints** (`/api/documents`)
   - Controller: `DocumentController` exposing `POST /api/documents` (201), `GET /api/documents` (200), `GET /api/documents/{id}` (200/404).
   - Tests: `DocumentControllerTest` (WebMvc controller slice) and `DocumentIngestionE2EIntegrationTest` (end-to-end small PDF ingestion).
-- [ ] **RAG-029: Delete Document API** (Next up)
-- [ ] **RAG-030: Update / Re-ingest Document API**
+- [x] **RAG-029: Delete Document API**
+  - Endpoint: `DELETE /api/documents/{id}` (204 No Content / 404 Not Found).
+  - Ordered deletion: deletes vectors (by docId) -> deletes physical files -> deletes database metadata row.
+  - Tests: `DocumentDeleteIntegrationTest` confirming complete vector unretrievability and subsequent 404, `DocumentControllerTest`, and `IngestionServiceTest`.
+- [ ] **RAG-030: Update / Re-ingest Document API** (Next up)
 
 ---
 

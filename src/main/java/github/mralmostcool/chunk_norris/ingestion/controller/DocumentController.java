@@ -55,4 +55,13 @@ public class DocumentController {
                 .orElseThrow(() -> new DocumentNotFoundException(id.toString()));
         return ResponseEntity.ok(DocumentResponse.from(document));
     }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
+    @Operation(summary = "Delete an ingested document, its vector embeddings, and physical files")
+    public ResponseEntity<Void> deleteDocument(@PathVariable("id") UUID id) {
+        ingestionService.deleteDocument(id);
+        return ResponseEntity.noContent().build();
+    }
+
 }
+

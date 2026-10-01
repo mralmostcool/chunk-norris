@@ -127,4 +127,27 @@ class DocumentControllerTest {
                 .andExpect(jsonPath("$.status", is(404)))
                 .andExpect(jsonPath("$.code", is("DOCUMENT_NOT_FOUND")));
     }
+
+    @Test
+    @DisplayName("DELETE /api/documents/{id} returns 204 No Content")
+    void deleteDocument_returns204() throws Exception {
+        UUID docId = UUID.randomUUID();
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/documents/" + docId))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("DELETE /api/documents/{id} returns 404 when document not found")
+    void deleteDocument_notFound_returns404() throws Exception {
+        UUID docId = UUID.randomUUID();
+        org.mockito.Mockito.doThrow(new github.mralmostcool.chunk_norris.common.exceptions.DocumentNotFoundException(docId.toString()))
+                .when(ingestionService).deleteDocument(docId);
+
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/documents/" + docId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.code").value("DOCUMENT_NOT_FOUND"));
+    }
 }

@@ -224,4 +224,34 @@ class IngestionServiceTest {
         verify(fileStorageService).delete(any(UUID.class));
         verify(documentRepository).updateStatus(any(UUID.class), eq(DocumentStatus.FAILED), eq("Vector store unavailable"));
     }
+
+    @Test
+    @DisplayName("delete: deletes vectors first, file second, and metadata row last")
+    void delete_orderMatters() {
+        UUID docId = UUID.randomUUID();
+        Document doc = Document.builder().id(docId).status(DocumentStatus.READY).build();
+        when(documentRepository.findById(docId)).thenReturn(Optional.of(doc));
+
+        ingestionService.delete(docId);
+
+        org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(vectorBatchService, fileStorageService, documentRepository);
+        inOrder.verify(vectorBatchService).deleteByDocId(docId);
+        inOrder.verify(fileStorageService).delete(docId);
+        inOrder.verify(documentRepository).deleteById(docId);
+    }
+
+    @Test
+    @DisplayName("delete non-existent document throws DocumentNotFoundException")
+    void delete_notFound_throwsException() {
+        UUID docId = UUID.randomUUID();
+        when(documentRepository.findById(docId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> ingestionService.delete(docId))
+                .isInstanceOf(github.mralmostcool.chunk_norris.common.exceptions.DocumentNotFoundException.class);
+
+        verify(vectorBatchService, never()).deleteByDocId(any());
+        verify(fileStorageService, never()).delete(any());
+        verify(documentRepository, never()).deleteById(any());
+    }
 }
+
