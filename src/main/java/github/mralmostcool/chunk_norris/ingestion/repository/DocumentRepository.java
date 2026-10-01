@@ -84,6 +84,17 @@ public class DocumentRepository {
         return jdbcTemplate.query(sql, ROW_MAPPER, checksum).stream().findFirst();
     }
 
+    public Optional<Document> findByChecksumAndStatus(String checksum, DocumentStatus status) {
+        String sql = """
+                SELECT id, filename, content_type, size_bytes, checksum, chunk_count, status, failure_reason, uploaded_at
+                FROM documents
+                WHERE checksum = ? AND status = ?
+                ORDER BY uploaded_at DESC
+                LIMIT 1
+                """;
+        return jdbcTemplate.query(sql, ROW_MAPPER, checksum, status.name()).stream().findFirst();
+    }
+
     public int updateStatus(UUID id, DocumentStatus status) {
         return updateStatus(id, status, null);
     }

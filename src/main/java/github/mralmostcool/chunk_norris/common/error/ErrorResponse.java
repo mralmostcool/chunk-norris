@@ -3,11 +3,10 @@ package github.mralmostcool.chunk_norris.common.error;
 import java.time.Instant;
 
 public record ErrorResponse(
-        Instant timestamp,
-        int status,
-        String code,
-        String message,
-        String path,
-        String correlationId) {
-
+                Instant timestamp,
+                int status,
+                String code,
+                String message,
+                String path,
+                String correlationId) {
 }

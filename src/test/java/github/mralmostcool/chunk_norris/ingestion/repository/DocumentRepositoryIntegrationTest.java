@@ -223,4 +223,62 @@ class DocumentRepositoryIntegrationTest {
 
         assertThat(documentRepository.findById(id)).isEmpty();
     }
+
+    @Test
+    @DisplayName("findByChecksumAndStatus: finds document by checksum and status")
+    void findByChecksumAndStatus() {
+        String checksum = "6666666666666666666666666666666666666666666666666666666666666666";
+        Document docReady = Document.builder()
+                .id(UUID.randomUUID())
+                .filename("ready.pdf")
+                .contentType("application/pdf")
+                .sizeBytes(200L)
+                .checksum(checksum)
+                .chunkCount(2)
+                .status(DocumentStatus.READY)
+                .uploadedAt(Instant.now())
+                .build();
+        documentRepository.insert(docReady);
+
+        Optional<Document> foundReady = documentRepository.findByChecksumAndStatus(checksum, DocumentStatus.READY);
+        assertThat(foundReady).isPresent();
+        assertThat(foundReady.get().status()).isEqualTo(DocumentStatus.READY);
+
+        Optional<Document> foundProcessing = documentRepository.findByChecksumAndStatus(checksum, DocumentStatus.PROCESSING);
+        assertThat(foundProcessing).isEmpty();
+    }
+
+    @Test
+    @DisplayName("duplicate checksum allowed when previous document status is FAILED")
+    void allowDuplicateChecksumForFailedDoc() {
+        String checksum = "7777777777777777777777777777777777777777777777777777777777777777";
+        Document failedDoc = Document.builder()
+                .id(UUID.randomUUID())
+                .filename("failed.pdf")
+                .contentType("application/pdf")
+                .sizeBytes(100L)
+                .checksum(checksum)
+                .chunkCount(0)
+                .status(DocumentStatus.FAILED)
+                .failureReason("Corrupt file")
+                .uploadedAt(Instant.now().minusSeconds(60))
+                .build();
+        documentRepository.insert(failedDoc);
+
+        Document newDoc = Document.builder()
+                .id(UUID.randomUUID())
+                .filename("retry.pdf")
+                .contentType("application/pdf")
+                .sizeBytes(100L)
+                .checksum(checksum)
+                .chunkCount(0)
+                .status(DocumentStatus.PROCESSING)
+                .uploadedAt(Instant.now())
+                .build();
+
+        Document inserted = documentRepository.insert(newDoc);
+        assertThat(inserted).isNotNull();
+        assertThat(documentRepository.findById(newDoc.id())).isPresent();
+    }
 }
+

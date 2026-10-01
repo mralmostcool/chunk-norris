@@ -8,15 +8,27 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@Testcontainers
 public class OllamaSmokeIntegrationTest {
+
+    @Container
+    @ServiceConnection
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(
+            DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"));
 
     @Autowired
     private ChatModel chatmodel;
+
 
     @Autowired
     private EmbeddingModel embeddingModel;

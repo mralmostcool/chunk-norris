@@ -53,7 +53,12 @@ FileStorageService  UploadValidator  DocumentRepository
   - Max size enforcement (throws `MaxUploadSizeExceededException` -> 413).
   - Empty file detection (throws `EmptyFileException` -> 400).
   - Unit tests: `UploadValidatorTest`.
-- [ ] **RAG-023: Checksum and Duplicate Detection** (Next up)
+- [x] **RAG-023: Checksum and Duplicate Detection**
+  - Service: `ChecksumService` computing SHA-256 hex string from bytes, input streams, and multipart files.
+  - Repository: `DocumentRepository.findByChecksumAndStatus(checksum, status)`.
+  - Migration: `V5__relax_failed_checksum_unique_constraint.sql` allows duplicate checksum when status is `FAILED`.
+  - Duplicate detection rule: 409 `DuplicateDocumentException` on `READY` or active duplicates; re-ingest allowed on `FAILED`.
+  - Tests: `ChecksumServiceTest`, `DocumentRepositoryIntegrationTest`.
 - [ ] **RAG-024: Parsing with TikaDocumentReader** (Next up)
 - [ ] **RAG-025: Chunking with TokenTextSplitter**
 - [ ] **RAG-026: Embed and Store**
@@ -65,8 +70,8 @@ FileStorageService  UploadValidator  DocumentRepository
 ---
 
 ## 3. Test Suite Status
-- Total Tests: 51
-- Passing: 51
+- Total Tests: 58
+- Passing: 58
 - Failures: 0
 - Errors: 0
 - Skipped: 0
