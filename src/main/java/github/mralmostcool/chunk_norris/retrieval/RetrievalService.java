@@ -19,14 +19,17 @@ public class RetrievalService {
     private final VectorStore vectorStore;
     private final RetrievalConfig retrievalConfig;
     private final MetadataFilterBuilder metadataFilterBuilder;
+    private final ChunkDeduplicator chunkDeduplicator;
 
     public RetrievalService(
             VectorStore vectorStore,
             RetrievalConfig retrievalConfig,
-            MetadataFilterBuilder metadataFilterBuilder) {
+            MetadataFilterBuilder metadataFilterBuilder,
+            ChunkDeduplicator chunkDeduplicator) {
         this.vectorStore = vectorStore;
         this.retrievalConfig = retrievalConfig;
         this.metadataFilterBuilder = metadataFilterBuilder != null ? metadataFilterBuilder : new MetadataFilterBuilder();
+        this.chunkDeduplicator = chunkDeduplicator != null ? chunkDeduplicator : new ChunkDeduplicator();
     }
 
     public List<RetrievedChunk> retrieve(String query) {
@@ -87,9 +90,11 @@ public class RetrievalService {
                 .map(RetrievedChunk::fromDocument)
                 .toList();
 
-        log.debug("Retrieved {} chunks meeting threshold {} for query: '{}'",
-                results.size(), effectiveThreshold, query);
-        return results;
+        List<RetrievedChunk> deduped = chunkDeduplicator.deduplicate(results);
+
+        log.debug("Retrieved {} chunks (deduped from {}) meeting threshold {} for query: '{}'",
+                deduped.size(), results.size(), effectiveThreshold, query);
+        return deduped;
     }
 
     public RetrievalConfig getRetrievalConfig() {

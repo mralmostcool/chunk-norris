@@ -34,7 +34,7 @@ class RetrievalServiceTest {
     @BeforeEach
     void setUp() {
         retrievalConfig = new RetrievalConfig(4, 0.6);
-        retrievalService = new RetrievalService(vectorStore, retrievalConfig, new MetadataFilterBuilder());
+        retrievalService = new RetrievalService(vectorStore, retrievalConfig, new MetadataFilterBuilder(), new ChunkDeduplicator());
     }
 
     @Test
@@ -121,5 +121,25 @@ class RetrievalServiceTest {
         assertThat(captured.getTopK()).isEqualTo(10);
         assertThat(captured.getSimilarityThreshold()).isEqualTo(0.8);
         assertThat(captured.getFilterExpression()).isEqualTo(filter);
+    }
+
+    @Test
+    @DisplayName("Deduplicates near-identical chunks returned by vector store, preserving highest score")
+    void testNearIdenticalChunksDeduplicated() {
+        Document doc1 = Document.builder()
+                .text("Spring Boot makes developing REST microservices extraordinarily productive.")
+                .score(0.92)
+                .build();
+        Document doc2 = Document.builder()
+                .text("Spring Boot makes developing REST microservices extraordinarily productive.")
+                .score(0.81)
+                .build();
+
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(doc1, doc2));
+
+        List<RetrievedChunk> results = retrievalService.retrieve("spring boot microservices");
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).score()).isEqualTo(0.92);
     }
 }
