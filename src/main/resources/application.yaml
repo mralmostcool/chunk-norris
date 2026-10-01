@@ -74,6 +74,9 @@ rag:
   chunk-overlap: 50
   top-k: 4
   similarity-threshold: 0.5
+  retrieval:
+    top-k: 4
+    similarity-threshold: 0.5
   memory-window: 10
   max-upload-bytes: 20971520 # 20MB
   upload-dir: data/uploads
