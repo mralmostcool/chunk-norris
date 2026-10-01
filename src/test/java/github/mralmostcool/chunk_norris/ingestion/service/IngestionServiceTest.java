@@ -253,5 +253,58 @@ class IngestionServiceTest {
         verify(fileStorageService, never()).delete(any());
         verify(documentRepository, never()).deleteById(any());
     }
+
+    @Test
+    @DisplayName("updateDocument: replaces file, cleans old vectors, re-chunks, re-embeds and updates row")
+    void updateDocument_happyPath() {
+        UUID docId = UUID.randomUUID();
+        Document existing = Document.builder()
+                .id(docId)
+                .filename("old.pdf")
+                .contentType("application/pdf")
+                .sizeBytes(10L)
+                .checksum("oldChecksum")
+                .chunkCount(1)
+                .status(DocumentStatus.READY)
+                .uploadedAt(Instant.now().minusSeconds(100))
+                .build();
+
+        when(documentRepository.findById(docId)).thenReturn(Optional.of(existing));
+        when(checksumService.calculateSha256(mockFile)).thenReturn("newChecksum");
+        when(documentRepository.findByChecksumAndStatus("newChecksum", DocumentStatus.READY)).thenReturn(Optional.empty());
+        when(documentRepository.findByChecksumAndStatus("newChecksum", DocumentStatus.PROCESSING)).thenReturn(Optional.empty());
+        when(fileStorageService.sanitizeFilename("test.pdf")).thenReturn("test.pdf");
+
+        Path newPath = Paths.get("data/uploads/new.pdf");
+        when(fileStorageService.save(eq(docId), eq(mockFile))).thenReturn(newPath);
+
+        org.springframework.ai.document.Document parsed = org.springframework.ai.document.Document.builder().text("new content").build();
+        when(documentParser.parse(newPath)).thenReturn(List.of(parsed));
+
+        org.springframework.ai.document.Document chunk = org.springframework.ai.document.Document.builder().text("new content").build();
+        when(documentChunker.chunk(eq(docId), eq("test.pdf"), anyList())).thenReturn(List.of(chunk));
+
+        Document updatedDoc = existing.toBuilder()
+                .filename("test.pdf")
+                .checksum("newChecksum")
+                .chunkCount(1)
+                .status(DocumentStatus.READY)
+                .build();
+        // Subsequent findById returns updated
+        when(documentRepository.findById(docId)).thenReturn(Optional.of(existing), Optional.of(updatedDoc));
+
+        Document result = ingestionService.updateDocument(docId, mockFile);
+
+        assertThat(result.filename()).isEqualTo("test.pdf");
+        assertThat(result.checksum()).isEqualTo("newChecksum");
+
+        // Verify old vectors deleted
+        verify(vectorBatchService).deleteByDocId(docId);
+        // Verify old file deleted
+        verify(fileStorageService).delete(docId);
+        // Verify document table updated
+        verify(documentRepository).update(any(Document.class));
+    }
 }
+
 

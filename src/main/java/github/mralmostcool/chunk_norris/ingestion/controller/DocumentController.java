@@ -56,12 +56,22 @@ public class DocumentController {
         return ResponseEntity.ok(DocumentResponse.from(document));
     }
 
+    @org.springframework.web.bind.annotation.PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Update and re-ingest a document with new content")
+    public ResponseEntity<DocumentResponse> updateDocument(
+            @PathVariable("id") UUID id,
+            @RequestParam("file") MultipartFile file) {
+        Document updated = ingestionService.updateDocument(id, file);
+        return ResponseEntity.ok(DocumentResponse.from(updated));
+    }
+
     @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
     @Operation(summary = "Delete an ingested document, its vector embeddings, and physical files")
     public ResponseEntity<Void> deleteDocument(@PathVariable("id") UUID id) {
         ingestionService.deleteDocument(id);
         return ResponseEntity.noContent().build();
     }
+
 
 }
 

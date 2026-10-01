@@ -123,6 +123,82 @@ public class IngestionService {
         documentRepository.deleteById(docId);
     }
 
+    public Document updateDocument(UUID docId, MultipartFile file) {
+        if (docId == null) {
+            throw new IllegalArgumentException("docId must not be null");
+        }
+
+        // 1. Verify document exists
+        Document existing = documentRepository.findById(docId)
+                .orElseThrow(() -> new github.mralmostcool.chunk_norris.common.exceptions.DocumentNotFoundException(docId.toString()));
+
+        // 2. Validate new file
+        uploadValidator.validate(file);
+
+        // 3. Compute checksum
+        String checksum = checksumService.calculateSha256(file);
+
+        // 4. Duplicate check against other active documents
+        Optional<Document> duplicateReady = documentRepository.findByChecksumAndStatus(checksum, DocumentStatus.READY);
+        if (duplicateReady.isPresent() && !duplicateReady.get().id().equals(docId)) {
+            throw new DuplicateDocumentException(duplicateReady.get().id().toString());
+        }
+        Optional<Document> duplicateProcessing = documentRepository.findByChecksumAndStatus(checksum, DocumentStatus.PROCESSING);
+        if (duplicateProcessing.isPresent() && !duplicateProcessing.get().id().equals(docId)) {
+            throw new DuplicateDocumentException(duplicateProcessing.get().id().toString());
+        }
+
+        // 5. Delete old vectors and files
+        vectorBatchService.deleteByDocId(docId);
+        fileStorageService.delete(docId);
+
+        // 6. Mark PROCESSING
+        documentRepository.updateStatus(docId, DocumentStatus.PROCESSING);
+
+        String filename = fileStorageService.sanitizeFilename(file.getOriginalFilename());
+        String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
+
+        try {
+            // Save new file
+            Path savedPath = fileStorageService.save(docId, file);
+
+            // Re-parse
+            List<org.springframework.ai.document.Document> parsedDocs = documentParser.parse(savedPath);
+
+            // Re-chunk
+            List<org.springframework.ai.document.Document> chunks = documentChunker.chunk(docId, filename, parsedDocs);
+
+            // Re-embed and store
+            vectorBatchService.storeChunks(docId, chunks);
+
+            // Update document row with new metadata
+            Document updatedDoc = existing.toBuilder()
+                    .filename(filename)
+                    .contentType(contentType)
+                    .sizeBytes(file.getSize())
+                    .checksum(checksum)
+                    .chunkCount(chunks.size())
+                    .status(DocumentStatus.READY)
+                    .failureReason(null)
+                    .uploadedAt(Instant.now())
+                    .build();
+
+            documentRepository.update(updatedDoc);
+
+            return documentRepository.findById(docId)
+                    .orElseThrow(() -> new IllegalStateException("Document not found after re-ingestion: " + docId));
+
+        } catch (Exception e) {
+            log.error("Update/re-ingestion failed for docId {}. Triggering compensation.", docId, e);
+            compensate(docId, e.getMessage());
+            if (e instanceof RagException ragException) {
+                throw ragException;
+            }
+            throw new RuntimeException("Update/re-ingestion failed for document: " + filename, e);
+        }
+    }
+
+
 
     private void compensate(UUID docId, String failureReason) {
         // Compensate: remove partial vectors

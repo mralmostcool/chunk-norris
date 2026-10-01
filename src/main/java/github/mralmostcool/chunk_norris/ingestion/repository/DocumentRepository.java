@@ -125,4 +125,24 @@ public class DocumentRepository {
         return jdbcTemplate.update(sql, id);
     }
 
+    public int update(Document document) {
+        String sql = """
+                UPDATE documents
+                SET filename = ?, content_type = ?, size_bytes = ?, checksum = ?, chunk_count = ?, status = ?, failure_reason = ?, uploaded_at = ?
+                WHERE id = ?
+                """;
+        return jdbcTemplate.update(
+                sql,
+                document.filename(),
+                document.contentType(),
+                document.sizeBytes(),
+                document.checksum(),
+                document.chunkCount(),
+                document.status().name(),
+                document.failureReason(),
+                Timestamp.from(document.uploadedAt() != null ? document.uploadedAt() : Instant.now()),
+                document.id());
+    }
+
+
 }

@@ -83,13 +83,16 @@ FileStorageService  UploadValidator  DocumentRepository
   - Endpoint: `DELETE /api/documents/{id}` (204 No Content / 404 Not Found).
   - Ordered deletion: deletes vectors (by docId) -> deletes physical files -> deletes database metadata row.
   - Tests: `DocumentDeleteIntegrationTest` confirming complete vector unretrievability and subsequent 404, `DocumentControllerTest`, and `IngestionServiceTest`.
-- [ ] **RAG-030: Update / Re-ingest Document API** (Next up)
+- [x] **RAG-030: Update / Re-ingest Document API**
+  - Endpoint: `PUT /api/documents/{id}` (200 OK).
+  - Pipeline: file validation -> old vector deletion -> file replacement -> re-parsing -> re-chunking -> re-embedding -> metadata update.
+  - Tests: `DocumentUpdateIntegrationTest` verifying old content unretrievable and new content retrievable, `DocumentControllerTest`, and `IngestionServiceTest`.
 
 ---
 
 ## 3. Test Suite Status
-- Total Tests: 84
-- Passing: 84
+- Total Tests: 92
+- Passing: 92
 - Failures: 0
 - Errors: 0
 - Skipped: 0

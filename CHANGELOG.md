@@ -8,11 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.0-SNAPSHOT] - 2026-09-30
 
 ### Added
+- `ChecksumService` for SHA-256 duplicate detection and relaxed unique constraint for FAILED documents (RAG-023).
+- `DocumentParser` wrapping `TikaDocumentReader` for parsing PDF, DOCX, TXT, and HTML files (RAG-024).
+- `DocumentChunker` providing sliding-window token chunking with overlap from `RagProperties` and chunk metadata (RAG-025).
+- `VectorBatchService` batching chunk embeddings into pgvector with status lifecycle management (RAG-026).
+- `IngestionService` orchestrating the complete ingestion pipeline with automatic failure compensation (RAG-027).
+- `DocumentController` exposing REST endpoints for document upload, listing, and inspection (RAG-028).
+- Ordered document deletion endpoint `DELETE /api/documents/{id}` (RAG-029).
+- Document re-ingestion and update endpoint `PUT /api/documents/{id}` (RAG-030).
 - `FileStorageService` for raw upload persistence under `./data/uploads/{docId}/{filename}`, path traversal sanitization, and docId-scoped deletion (RAG-021).
 - `UploadValidator` for file validation: allow-list (PDF, DOCX, TXT, HTML), Apache Tika MIME detection, max size enforcement, and empty file check (RAG-022).
 - Exceptions `EmptyFileException`, `InvalidFilenameException`, and `FileStorageException`.
 - Unit tests `FileStorageServiceTest` and `UploadValidatorTest`.
 - Document model, repository, and DTOs (RAG-020).
+
 - Actuator health indicators for Ollama and PostgreSQL (RAG-013).
 - `OllamaHealthIndicator` verifying connectivity and presence of configured chat and embedding models.
 - `DbHealthIndicator` verifying database connectivity and `pgvector` extension installation.

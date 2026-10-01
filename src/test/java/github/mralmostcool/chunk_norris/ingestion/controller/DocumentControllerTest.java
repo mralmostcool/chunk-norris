@@ -150,4 +150,34 @@ class DocumentControllerTest {
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.code").value("DOCUMENT_NOT_FOUND"));
     }
+
+    @Test
+    @DisplayName("PUT /api/documents/{id} updates document and returns 200 OK")
+    void updateDocument_returns200() throws Exception {
+        UUID docId = UUID.randomUUID();
+        MockMultipartFile file = new MockMultipartFile("file", "updated.pdf", "application/pdf", "new data".getBytes());
+
+        Document doc = Document.builder()
+                .id(docId)
+                .filename("updated.pdf")
+                .contentType("application/pdf")
+                .sizeBytes(8L)
+                .checksum("checksum456")
+                .chunkCount(2)
+                .status(DocumentStatus.READY)
+                .uploadedAt(Instant.now())
+                .build();
+
+        when(ingestionService.updateDocument(org.mockito.ArgumentMatchers.eq(docId), any())).thenReturn(doc);
+
+        mvc.perform(multipart("/api/documents/" + docId)
+                .file(file)
+                .with(req -> { req.setMethod("PUT"); return req; }))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(docId.toString())))
+                .andExpect(jsonPath("$.filename", is("updated.pdf")))
+                .andExpect(jsonPath("$.status", is("READY")))
+                .andExpect(jsonPath("$.chunkCount", is(2)));
+    }
 }
+
