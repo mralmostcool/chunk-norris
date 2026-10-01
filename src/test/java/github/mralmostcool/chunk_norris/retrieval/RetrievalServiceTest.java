@@ -34,7 +34,12 @@ class RetrievalServiceTest {
     @BeforeEach
     void setUp() {
         retrievalConfig = new RetrievalConfig(4, 0.6);
-        retrievalService = new RetrievalService(vectorStore, retrievalConfig, new MetadataFilterBuilder(), new ChunkDeduplicator());
+        retrievalService = new RetrievalService(
+                vectorStore,
+                retrievalConfig,
+                new MetadataFilterBuilder(),
+                new ChunkDeduplicator(),
+                new CitationIndexer());
     }
 
     @Test
@@ -141,5 +146,29 @@ class RetrievalServiceTest {
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).score()).isEqualTo(0.92);
+        assertThat(results.get(0).citationIndex()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Assigns contiguous citation indices [1]..[N] in ranked order after dedup")
+    void testCitationIndicesAssignedInRankedOrder() {
+        Document doc1 = Document.builder()
+                .text("First distinct chunk on AI.")
+                .score(0.95)
+                .build();
+        Document doc2 = Document.builder()
+                .text("Second distinct chunk on databases.")
+                .score(0.85)
+                .build();
+
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(doc1, doc2));
+
+        List<RetrievedChunk> results = retrievalService.retrieve("some query");
+
+        assertThat(results).hasSize(2);
+        assertThat(results.get(0).citationIndex()).isEqualTo(1);
+        assertThat(results.get(0).score()).isEqualTo(0.95);
+        assertThat(results.get(1).citationIndex()).isEqualTo(2);
+        assertThat(results.get(1).score()).isEqualTo(0.85);
     }
 }

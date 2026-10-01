@@ -20,16 +20,19 @@ public class RetrievalService {
     private final RetrievalConfig retrievalConfig;
     private final MetadataFilterBuilder metadataFilterBuilder;
     private final ChunkDeduplicator chunkDeduplicator;
+    private final CitationIndexer citationIndexer;
 
     public RetrievalService(
             VectorStore vectorStore,
             RetrievalConfig retrievalConfig,
             MetadataFilterBuilder metadataFilterBuilder,
-            ChunkDeduplicator chunkDeduplicator) {
+            ChunkDeduplicator chunkDeduplicator,
+            CitationIndexer citationIndexer) {
         this.vectorStore = vectorStore;
         this.retrievalConfig = retrievalConfig;
         this.metadataFilterBuilder = metadataFilterBuilder != null ? metadataFilterBuilder : new MetadataFilterBuilder();
         this.chunkDeduplicator = chunkDeduplicator != null ? chunkDeduplicator : new ChunkDeduplicator();
+        this.citationIndexer = citationIndexer != null ? citationIndexer : new CitationIndexer();
     }
 
     public List<RetrievedChunk> retrieve(String query) {
@@ -91,10 +94,11 @@ public class RetrievalService {
                 .toList();
 
         List<RetrievedChunk> deduped = chunkDeduplicator.deduplicate(results);
+        List<RetrievedChunk> cited = citationIndexer.assignCitationIndices(deduped);
 
         log.debug("Retrieved {} chunks (deduped from {}) meeting threshold {} for query: '{}'",
-                deduped.size(), results.size(), effectiveThreshold, query);
-        return deduped;
+                cited.size(), results.size(), effectiveThreshold, query);
+        return cited;
     }
 
     public RetrievalConfig getRetrievalConfig() {
