@@ -68,8 +68,11 @@ FileStorageService  UploadValidator  DocumentRepository
   - Component: `DocumentChunker` using jtokkit CL100K tokenization with `chunkSize` and `chunkOverlap` from `RagProperties`.
   - Metadata enrichment: `docId`, `filename`, `chunkIndex`, `page`.
   - Tests: `DocumentChunkerTest` asserting chunk count, overlap preservation, and metadata keys.
-- [ ] **RAG-026: Embed and Store** (Next up)
-- [ ] **RAG-027: IngestionService Orchestration**
+- [x] **RAG-026: Embed and Store**
+  - Component: `VectorBatchService` batching chunks to `VectorStore.add()` (default batch 50) to prevent timeouts.
+  - Lifecycle: sets `chunkCount` and marks document `READY` on success, `FAILED` with failureReason on error.
+  - Tests: `VectorBatchServiceTest` and `VectorBatchServiceIntegrationTest` verifying vector count matches `chunkCount`.
+- [ ] **RAG-027: IngestionService Orchestration** (Next up)
 - [ ] **RAG-028: Document Endpoints** (`/api/documents`)
 - [ ] **RAG-029: Delete Document API**
 - [ ] **RAG-030: Update / Re-ingest Document API**
@@ -77,8 +80,8 @@ FileStorageService  UploadValidator  DocumentRepository
 ---
 
 ## 3. Test Suite Status
-- Total Tests: 67
-- Passing: 67
+- Total Tests: 72
+- Passing: 72
 - Failures: 0
 - Errors: 0
 - Skipped: 0
