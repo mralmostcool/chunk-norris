@@ -72,16 +72,19 @@ FileStorageService  UploadValidator  DocumentRepository
   - Component: `VectorBatchService` batching chunks to `VectorStore.add()` (default batch 50) to prevent timeouts.
   - Lifecycle: sets `chunkCount` and marks document `READY` on success, `FAILED` with failureReason on error.
   - Tests: `VectorBatchServiceTest` and `VectorBatchServiceIntegrationTest` verifying vector count matches `chunkCount`.
-- [ ] **RAG-027: IngestionService Orchestration** (Next up)
-- [ ] **RAG-028: Document Endpoints** (`/api/documents`)
+- [x] **RAG-027: IngestionService Orchestration**
+  - Component: `IngestionService` orchestrating validate -> hash -> duplicate check -> register -> save -> parse -> chunk -> embed -> READY.
+  - Fault compensation: cleans up vector fragments and disk files, sets `FAILED` with failureReason on any error.
+  - Tests: `IngestionServiceTest` injecting failures at each stage asserting clean state.
+- [ ] **RAG-028: Document Endpoints** (`/api/documents`) (Next up)
 - [ ] **RAG-029: Delete Document API**
 - [ ] **RAG-030: Update / Re-ingest Document API**
 
 ---
 
 ## 3. Test Suite Status
-- Total Tests: 72
-- Passing: 72
+- Total Tests: 78
+- Passing: 78
 - Failures: 0
 - Errors: 0
 - Skipped: 0

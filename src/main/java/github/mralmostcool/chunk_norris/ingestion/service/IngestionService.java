@@ -1,0 +1,125 @@
+package github.mralmostcool.chunk_norris.ingestion.service;
+
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import github.mralmostcool.chunk_norris.common.exceptions.DuplicateDocumentException;
+import github.mralmostcool.chunk_norris.common.exceptions.RagException;
+import github.mralmostcool.chunk_norris.ingestion.checksum.ChecksumService;
+import github.mralmostcool.chunk_norris.ingestion.chunking.DocumentChunker;
+import github.mralmostcool.chunk_norris.ingestion.embedding.VectorBatchService;
+import github.mralmostcool.chunk_norris.ingestion.model.Document;
+import github.mralmostcool.chunk_norris.ingestion.model.DocumentStatus;
+import github.mralmostcool.chunk_norris.ingestion.parser.DocumentParser;
+import github.mralmostcool.chunk_norris.ingestion.repository.DocumentRepository;
+import github.mralmostcool.chunk_norris.ingestion.storage.FileStorageService;
+import github.mralmostcool.chunk_norris.ingestion.validation.UploadValidator;
+import lombok.RequiredArgsConstructor;
+
+@Service
+@RequiredArgsConstructor
+public class IngestionService {
+
+    private static final Logger log = LoggerFactory.getLogger(IngestionService.class);
+
+    private final UploadValidator uploadValidator;
+    private final ChecksumService checksumService;
+    private final FileStorageService fileStorageService;
+    private final DocumentParser documentParser;
+    private final DocumentChunker documentChunker;
+    private final VectorBatchService vectorBatchService;
+    private final DocumentRepository documentRepository;
+
+    public Document ingest(MultipartFile file) {
+        // 1. Validate file
+        uploadValidator.validate(file);
+
+        // 2. Compute checksum
+        String checksum = checksumService.calculateSha256(file);
+
+        // 3. Duplicate detection: reject if already READY or PROCESSING
+        Optional<Document> readyDoc = documentRepository.findByChecksumAndStatus(checksum, DocumentStatus.READY);
+        if (readyDoc.isPresent()) {
+            throw new DuplicateDocumentException(readyDoc.get().id().toString());
+        }
+        Optional<Document> processingDoc = documentRepository.findByChecksumAndStatus(checksum, DocumentStatus.PROCESSING);
+        if (processingDoc.isPresent()) {
+            throw new DuplicateDocumentException(processingDoc.get().id().toString());
+        }
+
+        // 4. Register document in PROCESSING state
+        UUID docId = UUID.randomUUID();
+        String filename = fileStorageService.sanitizeFilename(file.getOriginalFilename());
+        String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
+
+        Document initialDoc = Document.builder()
+                .id(docId)
+                .filename(filename)
+                .contentType(contentType)
+                .sizeBytes(file.getSize())
+                .checksum(checksum)
+                .chunkCount(0)
+                .status(DocumentStatus.PROCESSING)
+                .uploadedAt(Instant.now())
+                .build();
+
+        documentRepository.insert(initialDoc);
+
+        // 5. Ingestion pipeline with compensation
+        try {
+            // Save file
+            Path savedPath = fileStorageService.save(docId, file);
+
+            // Parse document
+            List<org.springframework.ai.document.Document> parsedDocs = documentParser.parse(savedPath);
+
+            // Chunk document
+            List<org.springframework.ai.document.Document> chunks = documentChunker.chunk(docId, filename, parsedDocs);
+
+            // Embed and store
+            vectorBatchService.storeChunks(docId, chunks);
+
+            return documentRepository.findById(docId)
+                    .orElseThrow(() -> new IllegalStateException("Document not found after ingestion: " + docId));
+
+        } catch (Exception e) {
+            log.error("Ingestion failed for docId {}. Triggering compensation.", docId, e);
+            compensate(docId, e.getMessage());
+            if (e instanceof RagException ragException) {
+                throw ragException;
+            }
+            throw new RuntimeException("Ingestion failed for document: " + filename, e);
+        }
+    }
+
+    private void compensate(UUID docId, String failureReason) {
+        // Compensate: remove partial vectors
+        try {
+            vectorBatchService.deleteByDocId(docId);
+        } catch (Exception ex) {
+            log.warn("Compensation: failed to delete vectors for docId {}", docId, ex);
+        }
+
+        // Compensate: remove physical files
+        try {
+            fileStorageService.delete(docId);
+        } catch (Exception ex) {
+            log.warn("Compensation: failed to delete storage directory for docId {}", docId, ex);
+        }
+
+        // Compensate: mark status FAILED
+        try {
+            documentRepository.updateStatus(docId, DocumentStatus.FAILED, failureReason);
+        } catch (Exception ex) {
+            log.warn("Compensation: failed to update status to FAILED for docId {}", docId, ex);
+        }
+    }
+}
