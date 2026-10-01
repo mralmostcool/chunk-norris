@@ -64,8 +64,11 @@ FileStorageService  UploadValidator  DocumentRepository
   - Exception: `DocumentParsingException` (422 UNPROCESSABLE_CONTENT) for empty/unparseable files.
   - Fixtures: `sample.pdf`, `sample.docx`, `sample.txt`, `sample.html`.
   - Tests: `DocumentParserTest` verifying all formats parse to non-empty text.
-- [ ] **RAG-025: Chunking with TokenTextSplitter** (Next up)
-- [ ] **RAG-026: Embed and Store**
+- [x] **RAG-025: Chunking with TokenTextSplitter**
+  - Component: `DocumentChunker` using jtokkit CL100K tokenization with `chunkSize` and `chunkOverlap` from `RagProperties`.
+  - Metadata enrichment: `docId`, `filename`, `chunkIndex`, `page`.
+  - Tests: `DocumentChunkerTest` asserting chunk count, overlap preservation, and metadata keys.
+- [ ] **RAG-026: Embed and Store** (Next up)
 - [ ] **RAG-027: IngestionService Orchestration**
 - [ ] **RAG-028: Document Endpoints** (`/api/documents`)
 - [ ] **RAG-029: Delete Document API**
@@ -74,8 +77,8 @@ FileStorageService  UploadValidator  DocumentRepository
 ---
 
 ## 3. Test Suite Status
-- Total Tests: 64
-- Passing: 64
+- Total Tests: 67
+- Passing: 67
 - Failures: 0
 - Errors: 0
 - Skipped: 0
